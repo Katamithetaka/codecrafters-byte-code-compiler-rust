@@ -52,7 +52,13 @@ impl<'a> Display for TokenValue<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             TokenValue::Null => write!(f, "null"),
-            TokenValue::Number(v) => write!(f, "{:.1}", v),
+            TokenValue::Number(v) => {
+                if v.fract() == 0.0 {
+                    write!(f, "{:.1}", v)
+                } else {
+                    write!(f, "{}", v)
+                }
+            }
             TokenValue::String(s) => write!(f, "{}", s),
         }
     }
