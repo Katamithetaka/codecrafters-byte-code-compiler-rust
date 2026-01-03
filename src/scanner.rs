@@ -48,6 +48,10 @@ enum TokenValue<'a> {
     String(&'a str),
 }
 
+fn is_alpha(c: char) -> bool {
+    return c.is_ascii_alphabetic() || c == '_';
+}
+
 impl<'a> Display for TokenValue<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -207,6 +211,27 @@ impl<'a> Lexer<'a> {
             line: self.line,
         });
     }
+
+    pub fn consume_identifier(&mut self) -> Result<Token<'a>, ScanningError> {
+        let begin_pos = self.pos;
+        let mut found_end = false;
+        self.advance();
+        while let Some(v) = self.it.peek() {
+            if !is_alpha(*v) && !v.is_ascii_digit() {
+                break;
+            } else {
+                self.advance();
+            }
+        }
+
+        let lexeme = &self.input[begin_pos..self.pos];
+        return Ok(Token {
+            token: TokenKind::Identifier,
+            lexeme,
+            value: TokenValue::Null,
+            line: self.line,
+        });
+    }
 }
 
 impl<'a> Iterator for Lexer<'a> {
@@ -305,6 +330,7 @@ impl<'a> Iterator for Lexer<'a> {
                     self.advance();
                 }
                 Some(c) if c.is_ascii_digit() => return self.consume_number().into(),
+                Some(c) if is_alpha(*c) => return self.consume_identifier().into(),
                 Some(c) => {
                     let c = *c;
                     self.advance();
