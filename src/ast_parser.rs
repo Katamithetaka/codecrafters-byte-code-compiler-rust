@@ -2,7 +2,10 @@ use std::{collections::HashSet, fmt::Display, iter::Peekable};
 
 use crate::{
     Token, ast_parser,
-    expressions::Expression,
+    expressions::{
+        Expression,
+        group::{self, Group},
+    },
     scanner::{Keyword, TokenKind},
 };
 
@@ -139,6 +142,8 @@ pub enum ParserErrorDetails {
     UnexpectedEof,
     #[error("Unexpecpected token {0}, expected {1}")]
     UnexpectedToken(TokenKind, String),
+    #[error("Unexpecpected token {0}, expected {1}")]
+    InvalidToken(TokenKind, TokenKind),
 }
 
 impl<'a> AstParser<'a> {
@@ -202,11 +207,21 @@ impl<'a> AstParser<'a> {
         self.state.it.peek()
     }
 
-    pub fn advance(&mut self) -> &Token<'a> {
+    pub fn advance(&mut self) -> &'a Token<'a> {
         let token = self.state.it.next();
         self.state.pos += 1;
 
         token.unwrap()
+    }
+
+    pub fn consume(&mut self, token: TokenKind) -> Result<(), ParserError> {
+        if matches!(self.token_kind(), token) {
+            self.advance();
+            return Ok(());
+        } else {
+            let t = self.token_kind();
+            self.error(ParserErrorDetails::InvalidToken(t, token))
+        }
     }
 
     pub fn peek_or_last(&mut self) -> &Token<'a> {
@@ -255,15 +270,20 @@ impl<'a> AstParser<'a> {
         }
     }
 
-    pub fn expression(&'a mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
+    pub fn expression(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
         self.unexpected_eof()?;
         use crate::expressions::literal::Literal;
         match self.token_kind() {
-            TokenKind::LeftParen => todo!(),
+            TokenKind::LeftParen => {
+                self.advance();
+                let expr = self.expression()?;
+                self.consume(TokenKind::RightParen);
+                Ok(Box::new(Group::new(expr)))
+            }
             TokenKind::Number => Ok(Box::new(Literal::new(self.advance()))),
+            TokenKind::Keyword(Keyword::True) => Ok(Box::new(Literal::new(self.advance()))),
             TokenKind::String => Ok(Box::new(Literal::new(self.advance()))),
             TokenKind::Identifier => todo!(),
-            TokenKind::Keyword(Keyword::True) => Ok(Box::new(Literal::new(self.advance()))),
             TokenKind::Keyword(Keyword::False) => Ok(Box::new(Literal::new(self.advance()))),
             TokenKind::Keyword(Keyword::Nil) => Ok(Box::new(Literal::new(self.advance()))),
 

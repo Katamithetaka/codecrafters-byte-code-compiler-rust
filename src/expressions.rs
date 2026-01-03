@@ -3,6 +3,7 @@ use std::fmt::{Debug, Display};
 use crate::expressions::binary_expression::BinaryOp;
 
 pub mod binary_expression;
+pub mod group;
 pub mod literal;
 
 pub enum Value {
