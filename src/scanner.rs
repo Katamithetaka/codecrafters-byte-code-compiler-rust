@@ -4,7 +4,7 @@ use strum::{Display, IntoStaticStr};
 
 #[derive(thiserror::Error, Debug)]
 pub enum ScanningError {
-    #[error("[line {0}] Error: String was never terminated")]
+    #[error("[line {0}] Error: Unterminated string.")]
     UnterminatedString(usize),
     #[error("[line {0}] Error: Parsing number literal failed")]
     InvalidNumber(usize),
@@ -177,6 +177,7 @@ impl<'a> Lexer<'a> {
         while let Some(v) = self.it.peek() {
             if *v == '"' {
                 found_end = true;
+                self.advance();
                 break;
             } else {
                 if *v == '\n' {
@@ -192,7 +193,7 @@ impl<'a> Lexer<'a> {
         }
 
         let lexeme = &self.input[begin_pos..self.pos];
-        let value = TokenValue::String(&lexeme[1..=lexeme.len() - 1]); // remove quotes
+        let value = TokenValue::String(&lexeme[1..=lexeme.len() - 2]); // remove quotes
         return Ok(Token {
             token: TokenKind::String,
             lexeme,
