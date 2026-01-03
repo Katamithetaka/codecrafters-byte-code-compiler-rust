@@ -1,6 +1,10 @@
-use std::{fmt::Display, iter::Peekable, str::Chars};
+use std::{
+    fmt::Display,
+    iter::Peekable,
+    str::{Chars, FromStr},
+};
 
-use strum::{Display, IntoStaticStr};
+use strum::{Display, EnumString, IntoStaticStr};
 
 #[derive(thiserror::Error, Debug)]
 pub enum ScanningError {
@@ -10,6 +14,34 @@ pub enum ScanningError {
     InvalidNumber(usize),
     #[error("[line {0}] Error: Unexpected character: {1}")]
     LexicalError(usize, char),
+}
+
+#[derive(EnumString, IntoStaticStr, Debug, Clone, Copy, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")] // Display / IntoStaticStr
+pub enum Keyword {
+    And,
+    Class,
+    Else,
+    False,
+    For,
+    Fun,
+    If,
+    Nil,
+    Or,
+    Print,
+    Return,
+    Super,
+    This,
+    True,
+    Var,
+    While,
+}
+
+impl std::fmt::Display for Keyword {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str: &'static str = self.into();
+        write!(f, "{}", str.to_uppercase())
+    }
 }
 
 #[derive(Display, IntoStaticStr, Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,7 +69,9 @@ pub enum TokenKind {
     BangEqual,
     EqualEqual,
     Identifier,
-    #[strum(serialize = "EOF")]
+    #[strum(to_string = "{0}")]
+    Keyword(Keyword),
+    #[strum(to_string = "EOF")]
     EOF,
 }
 
@@ -225,6 +259,16 @@ impl<'a> Lexer<'a> {
         }
 
         let lexeme = &self.input[begin_pos..self.pos];
+
+        if let Ok(keyword) = Keyword::from_str(lexeme) {
+            return Ok(Token {
+                token: TokenKind::Keyword(keyword),
+                lexeme,
+                value: TokenValue::Null,
+                line: self.line,
+            });
+        }
+
         return Ok(Token {
             token: TokenKind::Identifier,
             lexeme,
