@@ -292,6 +292,9 @@ impl<'a> Iterator for Lexer<'a> {
 
                 Some('"') => return self.consume_string().into(),
                 Some('\n') => self.consume_new_line(),
+                Some(c) if c.is_whitespace() => {
+                    self.advance();
+                }
                 Some(c) if c.is_ascii_digit() => return self.consume_number().into(),
                 Some(c) => {
                     let c = *c;
