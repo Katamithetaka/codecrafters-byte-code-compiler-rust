@@ -223,10 +223,12 @@ impl<'a> Iterator for Lexer<'a> {
                     let _ = self.advance().unwrap();
                     match self.it.peek() {
                         Some('/') => loop {
-                            if let Some(next) = self.advance() {
-                                if next == '\n' {
+                            if let Some(next) = self.it.peek() {
+                                if *next == '\n' {
                                     self.consume_new_line();
                                     break;
+                                } else {
+                                    self.advance();
                                 }
                             } else {
                                 self.end = true;
