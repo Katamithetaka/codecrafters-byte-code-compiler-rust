@@ -5,7 +5,12 @@ authors = ["Codecrafters <hello@codecrafters.io>"]
 edition = "2024"
 rust-version = "1.91"
 
+[lib]
+path = "./src/lib.rs"
+name = "interpreter"
+
 [dependencies]
 anyhow = "1.0.68"                                # error handling
 bytes = "1.3.0"                                  # helps manage buffers
+strum = { version = "0.27.2", features = ["derive"] }
 thiserror = "1.0.38"                             # error handling

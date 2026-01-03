@@ -1,4 +1,5 @@
 #![allow(unused_variables)]
+use interpreter::*;
 use std::env;
 use std::fs;
 
@@ -23,11 +24,9 @@ fn main() {
             });
 
             // TODO: Uncomment the code below to pass the first stage
-            if !file_contents.is_empty() {
-                panic!("Scanner not implemented");
-            } else {
-                println!("EOF  null"); // Placeholder, replace this line when implementing the scanner
-            }
+            tokenize(&file_contents)
+                .iter()
+                .for_each(|c| println!("{}", c));
         }
         _ => {
             eprintln!("Unknown command: {}", command);
