@@ -179,6 +179,7 @@ impl<'a> Iterator for Lexer<'a> {
                 Some('/') => return Ok(self.consume_single_char(TokenKind::Slash, "/")).into(),
                 Some(',') => return Ok(self.consume_single_char(TokenKind::Comma, ",")).into(),
                 Some(';') => return Ok(self.consume_single_char(TokenKind::Semicolon, ";")).into(),
+                Some('.') => return Ok(self.consume_single_char(TokenKind::Dot, ".")).into(),
 
                 Some('{') => return Ok(self.consume_single_char(TokenKind::LeftBrace, "{")).into(),
                 Some('}') => {
