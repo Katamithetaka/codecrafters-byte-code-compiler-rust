@@ -17,6 +17,17 @@ pub enum Value {
     Boolean(bool),
 }
 
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Number(s) => write!(f, "{}", s),
+            Value::String(s) => write!(f, "{}", s),
+            Value::Null => f.write_str("nil"),
+            Value::Boolean(s) => write!(f, "{}", s),
+        }
+    }
+}
+
 impl<'a> Value {
     pub fn is_truthy(&self) -> bool {
         match self {
@@ -77,9 +88,26 @@ pub enum EvaluateOutcomeDetails {
     Return(Option<Value>),
 }
 
+impl Display for EvaluateOutcomeDetails {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EvaluateOutcomeDetails::Value(value) => {
+                write!(f, "{}", value.as_ref().unwrap_or(&Value::Null))
+            }
+            EvaluateOutcomeDetails::Return(value) => todo!(),
+        }
+    }
+}
+
 pub struct EvaluateOutcome {
     details: EvaluateOutcomeDetails,
     line: usize,
+}
+
+impl Display for EvaluateOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.details)
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
