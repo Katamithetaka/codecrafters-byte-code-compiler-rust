@@ -7,6 +7,8 @@ use strum::{Display, IntoStaticStr};
 pub enum TokenKind {
     LeftParen,
     RightParen,
+    LeftBrace,
+    RightBrace,
     Number,
     String,
     #[strum(serialize = "EOF")]
@@ -142,6 +144,8 @@ impl<'a> Iterator for Lexer<'a> {
             match self.it.peek() {
                 Some('(') => return self.consume_single_char(TokenKind::LeftParen, "(").into(),
                 Some(')') => return self.consume_single_char(TokenKind::RightParen, ")").into(),
+                Some('{') => return self.consume_single_char(TokenKind::LeftParen, "{").into(),
+                Some('}') => return self.consume_single_char(TokenKind::RightParen, "}").into(),
                 Some('\n') => self.consume_new_line(),
                 Some(_) => panic!("Unexpected token"),
                 None => {
