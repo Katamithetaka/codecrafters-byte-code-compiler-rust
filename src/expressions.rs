@@ -5,6 +5,7 @@ use crate::expressions::binary_expression::BinaryOp;
 pub mod binary_expression;
 pub mod group;
 pub mod literal;
+pub mod unary_expression;
 
 pub enum Value {
     Number(f64),

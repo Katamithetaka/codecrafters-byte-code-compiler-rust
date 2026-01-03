@@ -5,6 +5,7 @@ use crate::{
     expressions::{
         Expression,
         group::{self, Group},
+        unary_expression::{UnaryExpression, UnaryOp},
     },
     scanner::{Keyword, TokenKind},
 };
@@ -271,6 +272,29 @@ impl<'a> AstParser<'a> {
     }
 
     pub fn expression(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
+        self.unary()
+    }
+
+    pub fn unary(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
+        self.unexpected_eof()?;
+        use crate::expressions::literal::Literal;
+        match self.token_kind() {
+            TokenKind::Bang => {
+                self.advance();
+                Ok(Box::new(UnaryExpression::new(UnaryOp::Bang, self.unary()?)))
+            }
+            TokenKind::Minus => {
+                self.advance();
+                Ok(Box::new(UnaryExpression::new(
+                    UnaryOp::Minus,
+                    self.unary()?,
+                )))
+            }
+            _ => self.primary(),
+        }
+    }
+
+    pub fn primary(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
         self.unexpected_eof()?;
         use crate::expressions::literal::Literal;
         match self.token_kind() {

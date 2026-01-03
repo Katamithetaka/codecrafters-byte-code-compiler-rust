@@ -22,21 +22,21 @@ impl<'a> Display for BinaryOp {
 }
 
 #[derive(Debug)]
-pub struct BinaryExpression {
-    pub lhs: Box<dyn Expression>,
-    pub rhs: Box<dyn Expression>,
+pub struct BinaryExpression<'a> {
+    pub lhs: Box<dyn Expression + 'a>,
+    pub rhs: Box<dyn Expression + 'a>,
     pub op: BinaryOp,
     line_number: usize,
 }
 
-impl Display for BinaryExpression {
+impl<'a> Display for BinaryExpression<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({} {} {})", self.op, self.lhs, self.rhs)
     }
 }
 
-impl BinaryExpression {
-    pub fn new(op: BinaryOp, lhs: Box<dyn Expression>, rhs: Box<dyn Expression>) -> Self {
+impl<'a> BinaryExpression<'a> {
+    pub fn new(op: BinaryOp, lhs: Box<dyn Expression + 'a>, rhs: Box<dyn Expression + 'a>) -> Self {
         return Self {
             line_number: lhs.line_number(),
             lhs,
@@ -46,7 +46,7 @@ impl BinaryExpression {
     }
 }
 
-impl Expression for BinaryExpression {
+impl<'a> Expression for BinaryExpression<'a> {
     fn line_number(&self) -> usize {
         self.line_number
     }
