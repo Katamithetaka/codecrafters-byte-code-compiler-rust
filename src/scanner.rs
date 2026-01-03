@@ -28,6 +28,15 @@ pub enum TokenKind {
     Minus,
     Semicolon,
     Slash,
+    Equal,
+    Less,
+    Greater,
+    Bang,
+    LessEqual,
+    GreaterEqual,
+    BangEqual,
+    EqualEqual,
+    Identifier,
     #[strum(serialize = "EOF")]
     EOF,
 }
@@ -100,6 +109,40 @@ impl<'a> Lexer<'a> {
             lexeme: v,
             value: TokenValue::Null,
         };
+    }
+
+    pub fn consume_two(
+        &mut self,
+        two_char_token: (&'a str, TokenKind),
+        single_char_token: (&'a str, TokenKind),
+        peek_char: char,
+    ) -> Token<'a> {
+        self.advance().unwrap();
+        if let Some(c) = self.it.peek() {
+            if *c == peek_char {
+                self.advance().unwrap();
+                return Token {
+                    token: two_char_token.1,
+                    lexeme: two_char_token.0,
+                    value: TokenValue::Null,
+                    line: self.line,
+                };
+            } else {
+                return Token {
+                    token: single_char_token.1,
+                    lexeme: single_char_token.0,
+                    value: TokenValue::Null,
+                    line: self.line,
+                };
+            }
+        } else {
+            return Token {
+                token: single_char_token.1,
+                lexeme: single_char_token.0,
+                value: TokenValue::Null,
+                line: self.line,
+            };
+        }
     }
 
     pub fn consume_number(&mut self) -> Result<Token<'a>, ScanningError> {
@@ -176,7 +219,36 @@ impl<'a> Iterator for Lexer<'a> {
                 Some('+') => return Ok(self.consume_single_char(TokenKind::Plus, "+")).into(),
                 Some('-') => return Ok(self.consume_single_char(TokenKind::Minus, "-")).into(),
                 Some('*') => return Ok(self.consume_single_char(TokenKind::Star, "*")).into(),
-                Some('/') => return Ok(self.consume_single_char(TokenKind::Slash, "/")).into(),
+                Some('/') => {
+                    let _ = self.advance().unwrap();
+                    match self.it.peek() {
+                        Some('/') => loop {
+                            if let Some(next) = self.advance() {
+                                if next == '\n' {
+                                    self.consume_new_line();
+                                    break;
+                                }
+                            } else {
+                                self.end = true;
+                                return Some(Ok(Token {
+                                    token: TokenKind::EOF,
+                                    lexeme: "",
+                                    value: TokenValue::Null,
+                                    line: self.line,
+                                }));
+                            }
+                        },
+                        _ => {
+                            return Ok(Token {
+                                token: TokenKind::Slash,
+                                lexeme: "/",
+                                value: TokenValue::Null,
+                                line: self.line,
+                            })
+                            .into();
+                        }
+                    }
+                }
                 Some(',') => return Ok(self.consume_single_char(TokenKind::Comma, ",")).into(),
                 Some(';') => return Ok(self.consume_single_char(TokenKind::Semicolon, ";")).into(),
                 Some('.') => return Ok(self.consume_single_char(TokenKind::Dot, ".")).into(),
@@ -185,6 +257,39 @@ impl<'a> Iterator for Lexer<'a> {
                 Some('}') => {
                     return Ok(self.consume_single_char(TokenKind::RightBrace, "}")).into();
                 }
+                Some('>') => {
+                    return Ok(self.consume_two(
+                        (">=", TokenKind::GreaterEqual),
+                        (">", TokenKind::Greater),
+                        '=',
+                    ))
+                    .into();
+                }
+                Some('<') => {
+                    return Ok(self.consume_two(
+                        ("<=", TokenKind::LessEqual),
+                        ("<", TokenKind::Less),
+                        '=',
+                    ))
+                    .into();
+                }
+                Some('=') => {
+                    return Ok(self.consume_two(
+                        ("==", TokenKind::EqualEqual),
+                        ("=", TokenKind::Equal),
+                        '=',
+                    ))
+                    .into();
+                }
+                Some('!') => {
+                    return Ok(self.consume_two(
+                        ("!=", TokenKind::BangEqual),
+                        ("!", TokenKind::Bang),
+                        '=',
+                    ))
+                    .into();
+                }
+
                 Some('"') => return self.consume_string().into(),
                 Some('\n') => self.consume_new_line(),
                 Some(c) if c.is_ascii_digit() => return self.consume_number().into(),
