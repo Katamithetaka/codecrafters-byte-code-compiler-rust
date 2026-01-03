@@ -394,7 +394,6 @@ impl<'a> AstParser<'a> {
             TokenKind::Number => Ok(Box::new(Literal::new(self.advance()))),
             TokenKind::Keyword(Keyword::True) => Ok(Box::new(Literal::new(self.advance()))),
             TokenKind::String => Ok(Box::new(Literal::new(self.advance()))),
-            TokenKind::Identifier => todo!(),
             TokenKind::Keyword(Keyword::False) => Ok(Box::new(Literal::new(self.advance()))),
             TokenKind::Keyword(Keyword::Nil) => Ok(Box::new(Literal::new(self.advance()))),
 
