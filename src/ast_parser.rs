@@ -4,6 +4,7 @@ use crate::{
     Token, ast_parser,
     expressions::{
         Expression,
+        binary_expression::{BinaryExpression, BinaryOp},
         group::{self, Group},
         unary_expression::{UnaryExpression, UnaryOp},
     },
@@ -272,7 +273,45 @@ impl<'a> AstParser<'a> {
     }
 
     pub fn expression(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
-        self.unary()
+        self.term()
+    }
+
+    pub fn term(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
+        let mut factor = self.factor()?;
+
+        while matches!(self.token_kind(), TokenKind::Plus | TokenKind::Minus) {
+            let op = match self.token_kind() {
+                TokenKind::Plus => BinaryOp::Plus,
+                TokenKind::Minus => BinaryOp::Minus,
+                _ => unreachable!(),
+            };
+
+            self.advance();
+
+            let right = self.factor()?;
+            factor = Box::new(BinaryExpression::new(op, factor, right));
+        }
+
+        Ok(factor)
+    }
+
+    pub fn factor(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
+        let mut unary = self.unary()?;
+
+        while matches!(self.token_kind(), TokenKind::Slash | TokenKind::Star) {
+            let op = match self.token_kind() {
+                TokenKind::Star => BinaryOp::Star,
+                TokenKind::Slash => BinaryOp::Slash,
+                _ => unreachable!(),
+            };
+
+            self.advance();
+
+            let right = self.unary()?;
+            unary = Box::new(BinaryExpression::new(op, unary, right));
+        }
+
+        Ok(unary)
     }
 
     pub fn unary(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
