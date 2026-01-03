@@ -44,6 +44,39 @@ fn main() {
                 std::process::exit(65);
             }
         }
+        "parse" => {
+            let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
+                eprintln!("Failed to read file {}", filename);
+                String::new()
+            });
+
+            let tokens = {
+                tokenize(&file_contents)
+                    .into_iter()
+                    .collect::<Result<Vec<_>, _>>()
+            };
+
+            let tokens = match tokens {
+                Ok(ok) => ok,
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(65)
+                }
+            };
+
+            let mut parser = AstParser::new(&tokens);
+            let v = parser.expression();
+
+            let v = match v {
+                Ok(ok) => ok,
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(65)
+                }
+            };
+
+            println!("{v}");
+        }
         _ => {
             eprintln!("Unknown command: {}", command);
         }

@@ -76,7 +76,7 @@ pub enum TokenKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum TokenValue<'a> {
+pub enum TokenValue<'a> {
     Null,
     Number(f64),
     String(&'a str),
@@ -104,10 +104,10 @@ impl<'a> Display for TokenValue<'a> {
 
 #[derive(Debug)]
 pub struct Token<'a> {
-    token: TokenKind,
-    lexeme: &'a str,
-    value: TokenValue<'a>,
-    line: usize,
+    pub token: TokenKind,
+    pub lexeme: &'a str,
+    pub value: TokenValue<'a>,
+    pub line: usize,
 }
 
 impl<'a> Display for Token<'a> {
