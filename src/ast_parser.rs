@@ -5,7 +5,9 @@ use crate::{
     expressions::{
         Expression,
         binary_expression::{BinaryExpression, BinaryOp},
+        equality_expression::{EqualityExpression, EqualityOp},
         group::{self, Group},
+        relation_expression::{RelationalExpression, RelationalOp},
         unary_expression::{UnaryExpression, UnaryOp},
     },
     scanner::{Keyword, TokenKind},
@@ -273,7 +275,53 @@ impl<'a> AstParser<'a> {
     }
 
     pub fn expression(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
-        self.term()
+        self.equality()
+    }
+
+    pub fn equality(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
+        let mut rel = self.relational()?;
+
+        while matches!(
+            self.token_kind(),
+            TokenKind::EqualEqual | TokenKind::BangEqual
+        ) {
+            let op = match self.token_kind() {
+                TokenKind::EqualEqual => EqualityOp::EqualEqual,
+                TokenKind::BangEqual => EqualityOp::BangEqual,
+                _ => unreachable!(),
+            };
+
+            self.advance();
+
+            let right = self.relational()?;
+            rel = Box::new(EqualityExpression::new(op, rel, right));
+        }
+
+        Ok(rel)
+    }
+
+    pub fn relational(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
+        let mut term = self.term()?;
+
+        while matches!(
+            self.token_kind(),
+            TokenKind::Less | TokenKind::LessEqual | TokenKind::Greater | TokenKind::GreaterEqual
+        ) {
+            let op = match self.token_kind() {
+                TokenKind::Less => RelationalOp::Less,
+                TokenKind::LessEqual => RelationalOp::LessEqual,
+                TokenKind::Greater => RelationalOp::Greater,
+                TokenKind::GreaterEqual => RelationalOp::GreaterEqual,
+                _ => unreachable!(),
+            };
+
+            self.advance();
+
+            let right = self.term()?;
+            term = Box::new(RelationalExpression::new(op, term, right));
+        }
+
+        Ok(term)
     }
 
     pub fn term(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {

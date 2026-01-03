@@ -3,10 +3,13 @@ use std::fmt::{Debug, Display};
 use crate::expressions::binary_expression::BinaryOp;
 
 pub mod binary_expression;
+pub mod equality_expression;
 pub mod group;
 pub mod literal;
+pub mod relation_expression;
 pub mod unary_expression;
 
+#[derive(PartialEq)]
 pub enum Value {
     Number(f64),
     String(String),
