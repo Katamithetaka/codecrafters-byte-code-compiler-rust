@@ -8,8 +8,8 @@ pub enum ScanningError {
     UnterminatedString(usize),
     #[error("[line {0}] Error: Parsing number literal failed")]
     InvalidNumber(usize),
-    #[error("[line {0}] Error: Unexpected character")]
-    LexicalError(usize),
+    #[error("[line {0}] Error: Unexpected character: {1}")]
+    LexicalError(usize, char),
 }
 
 #[derive(Display, IntoStaticStr, Debug, Clone, Copy, PartialEq, Eq)]
@@ -188,7 +188,11 @@ impl<'a> Iterator for Lexer<'a> {
                 Some('"') => return self.consume_string().into(),
                 Some('\n') => self.consume_new_line(),
                 Some(c) if c.is_ascii_digit() => return self.consume_number().into(),
-                Some(_) => return Some(Err(ScanningError::LexicalError(self.line))),
+                Some(c) => {
+                    let c = *c;
+                    self.advance();
+                    return Some(Err(ScanningError::LexicalError(self.line, c)));
+                }
                 None => {
                     self.end = true;
                     return Some(Ok(Token {
@@ -203,7 +207,7 @@ impl<'a> Iterator for Lexer<'a> {
     }
 }
 
-pub fn tokenize(value: &str) -> Result<Vec<Token<'_>>, ScanningError> {
+pub fn tokenize(value: &str) -> Vec<Result<Token<'_>, ScanningError>> {
     let lexer = Lexer::new(value);
 
     return lexer.into_iter().collect();

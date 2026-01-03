@@ -24,12 +24,24 @@ fn main() {
             });
 
             // TODO: Uncomment the code below to pass the first stage
-            match tokenize(&file_contents) {
-                Ok(v) => v.iter().for_each(|c| println!("{}", c)),
-                Err(e) => {
-                    eprintln!("{}", e);
-                    std::process::exit(65);
+            let tokenizing_error = {
+                let mut tokenizing_error = false;
+                for token in tokenize(&file_contents) {
+                    match token.as_ref() {
+                        Ok(v) => {
+                            println!("{}", v);
+                        }
+                        Err(e) => {
+                            eprintln!("{}", e);
+                            tokenizing_error = true;
+                        }
+                    }
                 }
+                tokenizing_error
+            };
+
+            if tokenizing_error {
+                std::process::exit(65);
             }
         }
         _ => {
