@@ -24,9 +24,13 @@ fn main() {
             });
 
             // TODO: Uncomment the code below to pass the first stage
-            tokenize(&file_contents)
-                .iter()
-                .for_each(|c| println!("{}", c));
+            match tokenize(&file_contents) {
+                Ok(v) => v.iter().for_each(|c| println!("{}", c)),
+                Err(e) => {
+                    eprintln!("{}", e);
+                    std::process::exit(65);
+                }
+            }
         }
         _ => {
             eprintln!("Unknown command: {}", command);
