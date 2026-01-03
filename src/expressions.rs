@@ -40,9 +40,8 @@ impl<'a> Value {
     pub fn binary_op_compatible(&self, other: &Self, op: BinaryOp) -> Option<EvaluateErrorDetails> {
         match (self, other) {
             (Value::Number(_), Value::Number(_)) => None,
-            (Value::String(_), Value::String(_)) if (op != BinaryOp::Plus) => {
-                Some(EvaluateErrorDetails::BinaryNumberOp)
-            }
+
+            (Value::String(_), Value::String(_)) if (op == BinaryOp::Plus) => None,
             (Value::Number(_), _) | (_, Value::Number(_)) => {
                 Some(EvaluateErrorDetails::UnmatchedTypes)
             }
