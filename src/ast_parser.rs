@@ -3,14 +3,9 @@ use std::{collections::HashSet, fmt::Display, iter::Peekable};
 use crate::{
     Token, ast_parser,
     expressions::{
-        Expression,
-        binary_expression::{BinaryExpression, BinaryOp},
-        equality_expression::{EqualityExpression, EqualityOp},
-        group::{self, Group},
-        relation_expression::{RelationalExpression, RelationalOp},
-        unary_expression::{UnaryExpression, UnaryOp},
+        Expression, binary_expression::{BinaryExpression, BinaryOp}, equality_expression::{EqualityExpression, EqualityOp}, group::{self, Group}, relation_expression::{RelationalExpression, RelationalOp}, unary_expression::{UnaryExpression, UnaryOp}
     },
-    scanner::{Keyword, TokenKind},
+    scanner::{Keyword, TokenKind}, statements::{Statement, print_statement::{self, PrintStatement}},
 };
 
 pub struct LocalScope {
@@ -219,7 +214,8 @@ impl<'a> AstParser<'a> {
     }
 
     pub fn consume(&mut self, token: TokenKind) -> Result<(), ParserError> {
-        if matches!(self.token_kind(), token) {
+       
+        if self.token_kind() == token {
             self.advance();
             return Ok(());
         } else {
@@ -402,6 +398,33 @@ impl<'a> AstParser<'a> {
                 "primary".to_string(),
             )),
         }
+    }
+    pub fn print_statement(&mut self) -> Result<Box<dyn Statement + 'a>, ParserError> {
+        let expr = self.expression()?;
+        self.consume(TokenKind::Semicolon)?;
+        let statement = PrintStatement::new(expr);
+        Ok(Box::new(statement))
+    }
+    
+    pub fn statement(&mut self) -> Result<Box<dyn Statement + 'a>, ParserError> {
+        match self.token_kind() {
+            TokenKind::Keyword(Keyword::Print) => {
+                self.advance();
+                self.print_statement()
+            },
+            c => self.error(ParserErrorDetails::UnexpectedToken(
+                c,
+                "statement".to_string(),
+            )),
+        }
+    } 
+    
+    pub fn parse(&mut self) -> Result<Vec<Box<dyn Statement + 'a>>, ParserError> {
+        let mut result = vec![];
+        while !matches!(self.token_kind(), TokenKind::EOF) {
+            result.push(self.statement()?);
+        }
+        Ok(result)
     }
 }
 

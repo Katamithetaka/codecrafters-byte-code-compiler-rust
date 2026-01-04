@@ -1,4 +1,7 @@
 #![allow(unused_variables)]
+use interpreter::compiler::chunk::Chunk;
+use interpreter::compiler::instructions::Instructions;
+use interpreter::compiler::vm::interpret;
 use interpreter::*;
 use std::env;
 use std::fs;
@@ -108,18 +111,80 @@ fn main() {
                 }
             };
 
-            let eval = v.evaluate();
+            let mut chunk = Chunk::new();
+            
+            match v.write_expression(&mut chunk, Some(0), vec![]) {
+                Ok(_) => {},
+                Err(err) => {
+                    eprintln!("{err}");
+                    std::process::exit(70)
+                },
+            }
+            chunk.write_print(0, 123);
+            chunk.write_instruction(Instructions::Return, 123);
+            chunk.disassemble("eval chunk");
+            match interpret(&chunk) {
+                Ok(()) => {}
+                Err(err) => {
+                    eprintln!("{err}");
+                    std::process::exit(70)
+                }
+            }
+        },
+        "run" => {
+            let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
+                eprintln!("Failed to read file {}", filename);
+                String::new()
+            });
 
-            let result = match eval {
+            let tokens = {
+                tokenize(&file_contents)
+                    .into_iter()
+                    .collect::<Result<Vec<_>, _>>()
+            };
+
+            let tokens = match tokens {
                 Ok(ok) => ok,
                 Err(e) => {
                     eprintln!("{e}");
-                    std::process::exit(70)
+                    std::process::exit(65)
                 }
             };
 
-            println!("{}", result);
+            let mut parser = AstParser::new(&tokens);
+            let v = parser.parse();
+
+            let v = match v {
+                Ok(ok) => ok,
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(65)
+                }
+            };
+
+            let mut chunk = Chunk::new();
+            
+            for mut expr in v {
+                match expr.write_expression(&mut chunk, None, vec![]) {
+                    Ok(_) => {},
+                    Err(err) => {
+                        eprintln!("{err}");
+                        std::process::exit(70)
+                    },
+                }
+            }
+            chunk.write_instruction(Instructions::Return, 123);
+            chunk.disassemble("eval chunk");
+            match interpret(&chunk) {
+                Ok(()) => {}
+                Err(err) => {
+                    eprintln!("{err}");
+                    std::process::exit(70)
+                }
+            }
         }
+    
+
         _ => {
             eprintln!("Unknown command: {}", command);
         }

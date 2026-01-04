@@ -1,6 +1,9 @@
 use std::fmt::Display;
 
-use crate::expressions::{Expression, expect_ok};
+use crate::{
+    compiler::{CodeGenerator, instructions::Instructions},
+    expressions::{Expression, expect_ok},
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BinaryOp {
@@ -50,35 +53,24 @@ impl<'a> Expression for BinaryExpression<'a> {
     fn line_number(&self) -> usize {
         self.line_number
     }
+}
 
-    fn evaluate(&mut self) -> super::Result {
-        let left = self.lhs.evaluate();
-        let left = match expect_ok(left) {
-            Err(v) => return Err(v),
-            Ok(None) => return self.err(super::EvaluateErrorDetails::ExpectedValue),
-            Ok(Some(v)) => v,
-        };
-
-        self.line_number = self.rhs.line_number();
-        let right = self.rhs.evaluate();
-        let right = match expect_ok(right) {
-            Err(v) => return Err(v),
-            Ok(None) => return self.err(super::EvaluateErrorDetails::ExpectedValue),
-            Ok(Some(v)) => v,
-        };
-
-        self.line_number = self.lhs.line_number();
-
-        match left.binary_op_compatible(&right, self.op) {
-            Some(err) => return self.err(err),
-            None => (),
-        };
-
-        self.ok(Some(match self.op {
-            BinaryOp::Plus => left.add(&right),
-            BinaryOp::Minus => left.sub(&right),
-            BinaryOp::Star => left.mult(&right),
-            BinaryOp::Slash => left.div(&right),
-        }))
-    }
+impl<'a> CodeGenerator for BinaryExpression<'a> {
+    
+    
+        fn write_expression(
+            &mut self,
+            chunk: &mut crate::compiler::chunk::Chunk,
+            dst_register: Option<u8>,
+            mut reserved_registers: Vec<u8>,
+        ) -> crate::compiler::Result {
+            let instruction = match self.op {
+                BinaryOp::Plus => Instructions::Add,
+                BinaryOp::Minus => Instructions::Sub,
+                BinaryOp::Star => Instructions::Mul,
+                BinaryOp::Slash => Instructions::Div,
+            };
+    
+            crate::compiler::macros::binary_op!(instruction, dst_register, reserved_registers, chunk, self)
+        }
 }

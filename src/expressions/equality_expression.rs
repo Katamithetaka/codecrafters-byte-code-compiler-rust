@@ -1,6 +1,9 @@
 use std::fmt::Display;
 
-use crate::expressions::{Expression, expect_ok};
+use crate::{
+    compiler::{CodeGenerator, instructions::Instructions},
+    expressions::{Expression, expect_ok},
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum EqualityOp {
@@ -50,28 +53,27 @@ impl<'a> Expression for EqualityExpression<'a> {
     fn line_number(&self) -> usize {
         self.line_number
     }
+}
 
-    fn evaluate(&mut self) -> super::Result {
-        let left = self.lhs.evaluate();
-        let left = match expect_ok(left) {
-            Err(v) => return Err(v),
-            Ok(None) => return self.err(super::EvaluateErrorDetails::ExpectedValue),
-            Ok(Some(c)) => c,
+impl<'a> CodeGenerator for EqualityExpression<'a> {
+    
+    fn write_expression(
+        &mut self,
+        chunk: &mut crate::compiler::chunk::Chunk,
+        dst_register: Option<u8>,
+        mut reserved_registers: Vec<u8>,
+    ) -> crate::compiler::Result {
+        let instruction = match self.op {
+            EqualityOp::EqualEqual => Instructions::Eq,
+            EqualityOp::BangEqual => Instructions::Neq,
         };
 
-        self.line_number = self.rhs.line_number();
-        let right = self.rhs.evaluate();
-        let right = match expect_ok(right) {
-            Err(v) => return Err(v),
-            Ok(None) => return self.err(super::EvaluateErrorDetails::ExpectedValue),
-            Ok(Some(c)) => c,
+        let my_dst_register_0 = match dst_register {
+            Some(v) => v,
+            None => reserved_registers.iter().max().copied().unwrap_or(0) + 1, // this can be assumed to never happen
         };
 
-        self.line_number = self.lhs.line_number();
+        crate::compiler::macros::binary_op!(instruction, dst_register, reserved_registers, chunk, self)
 
-        self.ok(Some(super::Value::Boolean(match self.op {
-            EqualityOp::EqualEqual => left == right,
-            EqualityOp::BangEqual => left != right,
-        })))
     }
 }

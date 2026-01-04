@@ -1,6 +1,9 @@
 use std::fmt::Display;
 
-use crate::expressions::{Expression, expect_ok};
+use crate::{
+    compiler::{CodeGenerator, chunk::Chunk, instructions::Instructions},
+    expressions::{Expression, expect_ok},
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RelationalOp {
@@ -55,31 +58,23 @@ impl<'a> Expression for RelationalExpression<'a> {
         self.line_number
     }
 
-    fn evaluate(&mut self) -> super::Result {
-        let left = self.lhs.evaluate();
-        let left = match expect_ok(left) {
-            Err(v) => return Err(v),
-            Ok(None) => return self.err(super::EvaluateErrorDetails::ExpectedValue),
-            Ok(Some(super::Value::Number(v))) => v,
-            Ok(Some(_)) => return self.err(super::EvaluateErrorDetails::BinaryNumberOp),
+}
+
+impl<'a> CodeGenerator for RelationalExpression<'a> {
+    
+    fn write_expression(
+        &mut self,
+        chunk: &mut Chunk,
+        dst_register: Option<u8>,
+        mut reserved_registers: Vec<u8>,
+    ) -> crate::compiler::Result {
+        let instruction = match self.op {
+            RelationalOp::Greater => Instructions::Gt,
+            RelationalOp::GreaterEqual => Instructions::GtEq,
+            RelationalOp::Less => Instructions::Lt,
+            RelationalOp::LessEqual => Instructions::LtEq,
         };
-
-        self.line_number = self.rhs.line_number();
-        let right = self.rhs.evaluate();
-        let right = match expect_ok(right) {
-            Err(v) => return Err(v),
-            Ok(None) => return self.err(super::EvaluateErrorDetails::ExpectedValue),
-            Ok(Some(super::Value::Number(v))) => v,
-            Ok(Some(_)) => return self.err(super::EvaluateErrorDetails::BinaryNumberOp),
-        };
-
-        self.line_number = self.lhs.line_number();
-
-        self.ok(Some(super::Value::Boolean(match self.op {
-            RelationalOp::Less => left < right,
-            RelationalOp::Greater => left > right,
-            RelationalOp::GreaterEqual => left >= right,
-            RelationalOp::LessEqual => left <= right,
-        })))
+        
+        crate::compiler::macros::binary_op!(instruction, dst_register, reserved_registers, chunk, self)
     }
 }

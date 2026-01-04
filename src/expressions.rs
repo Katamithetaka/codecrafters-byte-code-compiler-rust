@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 
-use crate::expressions::binary_expression::BinaryOp;
+use crate::{compiler::{CodeGenerator, chunk::Chunk}, expressions::binary_expression::BinaryOp};
 
 pub mod binary_expression;
 pub mod equality_expression;
@@ -9,7 +9,7 @@ pub mod literal;
 pub mod relation_expression;
 pub mod unary_expression;
 
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum Value {
     Number(f64),
     String(String),
@@ -113,6 +113,8 @@ impl Display for EvaluateOutcome {
 pub enum EvaluateErrorDetails {
     #[error("Unexpected return statement")]
     UnexpectedReturn,
+    #[error("Unknown Operation {0}")]
+    UnexpectedOpCode(u8),
     #[error("Evaluate error: {0}")]
     Error(String),
     #[error("Expected value from expressio, got None")]
@@ -158,7 +160,7 @@ pub fn expect_ok(res: Result) -> std::result::Result<Option<Value>, EvaluateErro
     }
 }
 
-pub trait Expression: Display + Debug {
+pub trait Expression: Display + Debug + CodeGenerator {
     fn line_number(&self) -> usize;
 
     fn ok(&self, v: Option<Value>) -> Result {
@@ -181,6 +183,4 @@ pub trait Expression: Display + Debug {
             line: self.line_number(),
         });
     }
-
-    fn evaluate(&mut self) -> Result;
 }

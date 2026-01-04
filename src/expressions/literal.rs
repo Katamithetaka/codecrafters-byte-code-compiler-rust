@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use crate::{
     Token,
+    compiler::{CodeGenerator, chunk::Chunk},
     expressions::{Expression, Value, expect_ok},
     scanner::{Keyword, TokenKind, TokenValue},
 };
@@ -35,17 +36,54 @@ impl<'a> Expression for Literal<'a> {
         self.token.line
     }
 
-    fn evaluate(&mut self) -> super::Result {
-        self.ok(Some(match self.token.token {
-            TokenKind::Number | TokenKind::String => match self.token.value {
-                TokenValue::Number(v) => Value::Number(v),
-                TokenValue::String(v) => Value::String(v.to_string()),
+
+
+}
+
+impl<'a> CodeGenerator for Literal<'a> {
+    fn write_expression(
+        &mut self,
+        chunk: &mut Chunk,
+        dst_register: Option<u8>,
+        reserved_registers: Vec<u8>,
+    ) -> crate::compiler::Result {
+        let constant = match self.token.token {
+            TokenKind::Number => match self.token.value {
+                TokenValue::Number(v) => {
+                    let constant = chunk.add_constant(Value::Number(v));
+                    constant
+                }
                 _ => panic!("Got null token when evaluating literal"),
             },
-            TokenKind::Keyword(Keyword::True) => Value::Boolean(true),
-            TokenKind::Keyword(Keyword::False) => Value::Boolean(false),
-            TokenKind::Keyword(Keyword::Nil) => Value::Null,
+            TokenKind::String => match self.token.value {
+                TokenValue::String(v) => {
+                    let constant = chunk.add_constant(Value::String(v.to_string()));
+                    constant
+                }
+                _ => panic!("Got null token when evaluating literal"),
+            },
+            TokenKind::Keyword(Keyword::True) => {
+                let constant = chunk.add_constant(Value::Boolean(true));
+                constant
+            }
+            TokenKind::Keyword(Keyword::False) => {
+                let constant = chunk.add_constant(Value::Boolean(false));
+                constant
+            }
+            TokenKind::Keyword(Keyword::Nil) => {
+                let constant = chunk.add_constant(Value::Null);
+                constant
+            }
             _ => panic!("Invalid token considered as literal"),
-        }))
+        };
+
+        match dst_register {
+            Some(v) => {
+                chunk.write_load(v, constant, self.line_number() as i32);
+            }
+            None => {}
+        };
+        
+        Ok(())
     }
 }

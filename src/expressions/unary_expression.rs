@@ -1,6 +1,9 @@
 use std::fmt::Display;
 
-use crate::expressions::{Expression, Value, expect_ok};
+use crate::{
+    compiler::{CodeGenerator, chunk::Chunk, instructions::Instructions},
+    expressions::{Expression, Value, expect_ok},
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum UnaryOp {
@@ -39,19 +42,43 @@ impl<'a> Expression for UnaryExpression<'a> {
     fn line_number(&self) -> usize {
         self.rhs.line_number()
     }
+}
 
-    fn evaluate(&mut self) -> super::Result {
-        let left = self.rhs.evaluate();
-        let left = match expect_ok(left) {
-            Err(v) => return Err(v),
-            Ok(None) => return self.err(super::EvaluateErrorDetails::ExpectedValue),
-            Ok(Some(v)) => v,
+impl<'a> CodeGenerator for UnaryExpression<'a> {
+    fn write_expression(
+        &mut self,
+        chunk: &mut Chunk,
+        dst_register: Option<u8>,
+        mut reserved_registers: Vec<u8>,
+    ) -> crate::compiler::Result {
+        let my_dst_register = match dst_register {
+            Some(v) => v,
+            None => reserved_registers.iter().max().copied().unwrap_or(0) + 1,
         };
 
-        self.ok(Some(match (self.op, left) {
-            (UnaryOp::Bang, left) => Value::Boolean(!left.is_truthy()),
-            (UnaryOp::Minus, Value::Number(v)) => Value::Number(-v),
-            _ => return self.err(super::EvaluateErrorDetails::UnaryNumberOp),
-        }))
+        self.rhs
+            .write_expression(chunk, Some(my_dst_register), reserved_registers)?;
+
+        let dst = match dst_register {
+            Some(dst) => dst,
+            None => my_dst_register,
+        };
+
+        match self.op {
+            UnaryOp::Bang => chunk.write_unary(
+                Instructions::Bang,
+                my_dst_register,
+                dst,
+                self.line_number() as i32,
+            ),
+            UnaryOp::Minus => chunk.write_unary(
+                Instructions::Negate,
+                my_dst_register,
+                dst,
+                self.line_number() as i32,
+            ),
+        };
+        
+        Ok(())
     }
 }
