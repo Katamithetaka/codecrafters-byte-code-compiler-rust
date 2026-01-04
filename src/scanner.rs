@@ -1,7 +1,7 @@
 use std::{
     fmt::Display,
     iter::Peekable,
-    str::{Chars, FromStr},
+    str::{CharIndices, Chars, FromStr},
 };
 
 use strum::{Display, EnumString, IntoStaticStr};
@@ -118,7 +118,7 @@ impl<'a> Display for Token<'a> {
 
 struct Lexer<'a> {
     input: &'a str,
-    it: Peekable<Chars<'a>>,
+    it: Peekable<CharIndices<'a>>,
     line: usize,
     pos: usize,
     end: bool,
@@ -128,7 +128,7 @@ impl<'a> Lexer<'a> {
     pub fn new(v: &'a str) -> Self {
         Self {
             input: v,
-            it: v.chars().peekable(),
+            it: v.char_indices().peekable(),
             line: 1,
             pos: 0,
             end: false,
@@ -136,8 +136,21 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn advance(&mut self) -> Option<char> {
-        self.pos += 1;
-        return self.it.next();
+        
+        let next = self.it.next();
+        if let Some((offset, c)) = next {
+            self.pos = offset + 1;
+            return Some(c);
+        }
+        return None;
+    }
+    
+    pub fn peek(&mut self) -> Option<char> {
+        let next = self.it.peek();
+        if let Some((_, c)) = next {
+            return Some(*c);
+        }
+        return None;
     }
 
     pub fn consume_new_line(&mut self) {
@@ -162,8 +175,8 @@ impl<'a> Lexer<'a> {
         peek_char: char,
     ) -> Token<'a> {
         self.advance().unwrap();
-        if let Some(c) = self.it.peek() {
-            if *c == peek_char {
+        if let Some(c) = self.peek() {
+            if c == peek_char {
                 self.advance().unwrap();
                 return Token {
                     token: two_char_token.1,
@@ -191,8 +204,8 @@ impl<'a> Lexer<'a> {
 
     pub fn consume_number(&mut self) -> Result<Token<'a>, ScanningError> {
         let begin_pos = self.pos;
-        while let Some(v) = self.it.peek() {
-            if v.is_ascii_digit() || *v == '.' {
+        while let Some(v) = self.peek() {
+            if v.is_ascii_digit() || v == '.' {
                 self.advance();
             } else {
                 break;
@@ -218,13 +231,13 @@ impl<'a> Lexer<'a> {
         let begin_line = self.line;
         let mut found_end = false;
         self.advance();
-        while let Some(v) = self.it.peek() {
-            if *v == '"' {
+        while let Some(v) = self.peek() {
+            if v == '"' {
                 found_end = true;
                 self.advance();
                 break;
             } else {
-                if *v == '\n' {
+                if v == '\n' {
                     self.consume_new_line();
                 } else {
                     self.advance();
@@ -235,6 +248,8 @@ impl<'a> Lexer<'a> {
         if !found_end {
             return Err(ScanningError::UnterminatedString(begin_line));
         }
+        
+        
 
         let lexeme = &self.input[begin_pos..self.pos];
         let value = TokenValue::String(&lexeme[1..=lexeme.len() - 2]); // remove quotes
@@ -250,8 +265,8 @@ impl<'a> Lexer<'a> {
         let begin_pos = self.pos;
         let mut found_end = false;
         self.advance();
-        while let Some(v) = self.it.peek() {
-            if !is_alpha(*v) && !v.is_ascii_digit() {
+        while let Some(v) = self.peek() {
+            if !is_alpha(v) && !v.is_ascii_digit() {
                 break;
             } else {
                 self.advance();
@@ -259,7 +274,6 @@ impl<'a> Lexer<'a> {
         }
 
         let lexeme = &self.input[begin_pos..self.pos];
-
         if let Ok(keyword) = Keyword::from_str(lexeme) {
             return Ok(Token {
                 token: TokenKind::Keyword(keyword),
@@ -286,7 +300,7 @@ impl<'a> Iterator for Lexer<'a> {
             if self.end {
                 return None;
             }
-            match self.it.peek() {
+            match self.peek() {
                 Some('(') => return Ok(self.consume_single_char(TokenKind::LeftParen, "(")).into(),
                 Some(')') => {
                     return Ok(self.consume_single_char(TokenKind::RightParen, ")")).into();
@@ -297,10 +311,10 @@ impl<'a> Iterator for Lexer<'a> {
                 Some('*') => return Ok(self.consume_single_char(TokenKind::Star, "*")).into(),
                 Some('/') => {
                     let _ = self.advance().unwrap();
-                    match self.it.peek() {
+                    match self.peek() {
                         Some('/') => loop {
-                            if let Some(next) = self.it.peek() {
-                                if *next == '\n' {
+                            if let Some(next) = self.peek() {
+                                if next == '\n' {
                                     self.consume_new_line();
                                     break;
                                 } else {
@@ -374,9 +388,9 @@ impl<'a> Iterator for Lexer<'a> {
                     self.advance();
                 }
                 Some(c) if c.is_ascii_digit() => return self.consume_number().into(),
-                Some(c) if is_alpha(*c) => return self.consume_identifier().into(),
+                Some(c) if is_alpha(c) => return self.consume_identifier().into(),
                 Some(c) => {
-                    let c = *c;
+                    let c = c;
                     self.advance();
                     return Some(Err(ScanningError::LexicalError(self.line, c)));
                 }
