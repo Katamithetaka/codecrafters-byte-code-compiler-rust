@@ -5,7 +5,7 @@ use crate::{
     expressions::{
         Expression, binary_expression::{BinaryExpression, BinaryOp}, equality_expression::{EqualityExpression, EqualityOp}, group::{self, Group}, relation_expression::{RelationalExpression, RelationalOp}, unary_expression::{UnaryExpression, UnaryOp}
     },
-    scanner::{Keyword, TokenKind}, statements::{Statement, print_statement::{self, PrintStatement}},
+    scanner::{Keyword, TokenKind}, statements::{Statement, expression_statement::ExprStatement, print_statement::{self, PrintStatement}},
 };
 
 pub struct LocalScope {
@@ -406,16 +406,20 @@ impl<'a> AstParser<'a> {
         Ok(Box::new(statement))
     }
     
+    pub fn expr_statement(&mut self) -> Result<Box<dyn Statement + 'a>, ParserError> {
+        let expr = self.expression()?;
+        self.consume(TokenKind::Semicolon)?;
+        let statement = ExprStatement::new(expr);
+        Ok(Box::new(statement))
+    }
+    
     pub fn statement(&mut self) -> Result<Box<dyn Statement + 'a>, ParserError> {
         match self.token_kind() {
             TokenKind::Keyword(Keyword::Print) => {
                 self.advance();
                 self.print_statement()
             },
-            c => self.error(ParserErrorDetails::UnexpectedToken(
-                c,
-                "statement".to_string(),
-            )),
+            _ => self.expr_statement()
         }
     } 
     
