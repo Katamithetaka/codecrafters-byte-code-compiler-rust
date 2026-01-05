@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::{
     compiler::{CodeGenerator, chunk::Chunk, instructions::Instructions},
-    expressions::{Expression, Value, expect_ok},
+    expressions::{Expression, Expressions, Value, expect_ok},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -22,7 +22,7 @@ impl<'a> Display for UnaryOp {
 
 #[derive(Debug)]
 pub struct UnaryExpression<'a> {
-    pub rhs: Box<dyn Expression + 'a>,
+    pub rhs: Box<Expressions<'a>>,
     pub op: UnaryOp,
 }
 
@@ -33,7 +33,7 @@ impl<'a> Display for UnaryExpression<'a> {
 }
 
 impl<'a> UnaryExpression<'a> {
-    pub fn new(op: UnaryOp, rhs: Box<dyn Expression + 'a>) -> Self {
+    pub fn new(op: UnaryOp, rhs: Box<Expressions<'a>>) -> Self {
         return Self { rhs, op };
     }
 }
@@ -78,7 +78,7 @@ impl<'a> CodeGenerator for UnaryExpression<'a> {
                 self.line_number() as i32,
             ),
         };
-        
+
         Ok(())
     }
 }

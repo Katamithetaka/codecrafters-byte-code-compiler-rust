@@ -21,6 +21,7 @@ pub enum Instructions {
     Print = 15,
     DefineGlobal = 16,
     GetGlobal = 17,
+    SetGlobal = 18,
 }
 
 pub fn simple_instruction(name: &str, offset: usize) -> usize {
@@ -97,6 +98,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
         Some(Instructions::Print) => print_instruction("OP_PRINT", chunk, offset),
         Some(Instructions::DefineGlobal) => load_instruction("OP_G_DEF", chunk, offset),
         Some(Instructions::GetGlobal) => load_instruction("OP_G_GET", chunk, offset),
+        Some(Instructions::SetGlobal) => load_instruction("OP_G_SET", chunk, offset),
 
         None => offset + 1,
     }

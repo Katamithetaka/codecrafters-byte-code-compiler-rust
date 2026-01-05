@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::{
     compiler::{CodeGenerator, chunk::Chunk, instructions::Instructions},
-    expressions::{Expression, expect_ok},
+    expressions::{Expression, Expressions, expect_ok},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -26,8 +26,8 @@ impl<'a> Display for RelationalOp {
 
 #[derive(Debug)]
 pub struct RelationalExpression<'a> {
-    pub lhs: Box<dyn Expression + 'a>,
-    pub rhs: Box<dyn Expression + 'a>,
+    pub lhs: Box<Expressions<'a>>,
+    pub rhs: Box<Expressions<'a>>,
     pub op: RelationalOp,
     line_number: usize,
 }
@@ -39,11 +39,7 @@ impl<'a> Display for RelationalExpression<'a> {
 }
 
 impl<'a> RelationalExpression<'a> {
-    pub fn new(
-        op: RelationalOp,
-        lhs: Box<dyn Expression + 'a>,
-        rhs: Box<dyn Expression + 'a>,
-    ) -> Self {
+    pub fn new(op: RelationalOp, lhs: Box<Expressions<'a>>, rhs: Box<Expressions<'a>>) -> Self {
         return Self {
             line_number: lhs.line_number(),
             lhs,
@@ -57,11 +53,9 @@ impl<'a> Expression for RelationalExpression<'a> {
     fn line_number(&self) -> usize {
         self.line_number
     }
-
 }
 
 impl<'a> CodeGenerator for RelationalExpression<'a> {
-    
     fn write_expression(
         &mut self,
         chunk: &mut Chunk,
@@ -74,7 +68,13 @@ impl<'a> CodeGenerator for RelationalExpression<'a> {
             RelationalOp::Less => Instructions::Lt,
             RelationalOp::LessEqual => Instructions::LtEq,
         };
-        
-        crate::compiler::macros::binary_op!(instruction, dst_register, reserved_registers, chunk, self)
+
+        crate::compiler::macros::binary_op!(
+            instruction,
+            dst_register,
+            reserved_registers,
+            chunk,
+            self
+        )
     }
 }

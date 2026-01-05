@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::{
     compiler::{CodeGenerator, instructions::Instructions},
-    expressions::{Expression, expect_ok},
+    expressions::{Expression, Expressions, expect_ok},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -22,8 +22,8 @@ impl<'a> Display for EqualityOp {
 
 #[derive(Debug)]
 pub struct EqualityExpression<'a> {
-    pub lhs: Box<dyn Expression + 'a>,
-    pub rhs: Box<dyn Expression + 'a>,
+    pub lhs: Box<Expressions<'a>>,
+    pub rhs: Box<Expressions<'a>>,
     pub op: EqualityOp,
     line_number: usize,
 }
@@ -35,11 +35,7 @@ impl<'a> Display for EqualityExpression<'a> {
 }
 
 impl<'a> EqualityExpression<'a> {
-    pub fn new(
-        op: EqualityOp,
-        lhs: Box<dyn Expression + 'a>,
-        rhs: Box<dyn Expression + 'a>,
-    ) -> Self {
+    pub fn new(op: EqualityOp, lhs: Box<Expressions<'a>>, rhs: Box<Expressions<'a>>) -> Self {
         return Self {
             line_number: lhs.line_number(),
             lhs,
@@ -56,7 +52,6 @@ impl<'a> Expression for EqualityExpression<'a> {
 }
 
 impl<'a> CodeGenerator for EqualityExpression<'a> {
-    
     fn write_expression(
         &mut self,
         chunk: &mut crate::compiler::chunk::Chunk,
@@ -73,7 +68,12 @@ impl<'a> CodeGenerator for EqualityExpression<'a> {
             None => reserved_registers.iter().max().copied().unwrap_or(0) + 1, // this can be assumed to never happen
         };
 
-        crate::compiler::macros::binary_op!(instruction, dst_register, reserved_registers, chunk, self)
-
+        crate::compiler::macros::binary_op!(
+            instruction,
+            dst_register,
+            reserved_registers,
+            chunk,
+            self
+        )
     }
 }

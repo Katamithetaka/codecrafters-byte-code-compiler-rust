@@ -2,9 +2,19 @@ use std::fmt::{Debug, Display};
 
 use crate::{
     compiler::{CodeGenerator, chunk::Chunk},
-    expressions::binary_expression::BinaryOp,
+    expressions::{
+        assignment_expression::AssignmentExpression,
+        binary_expression::{BinaryExpression, BinaryOp},
+        equality_expression::EqualityExpression,
+        group::Group,
+        identifier::Identifier,
+        literal::Literal,
+        relation_expression::RelationalExpression,
+        unary_expression::UnaryExpression,
+    },
 };
 
+pub mod assignment_expression;
 pub mod binary_expression;
 pub mod equality_expression;
 pub mod group;
@@ -188,5 +198,82 @@ pub trait Expression: Display + Debug + CodeGenerator {
             error: v,
             line: self.line_number(),
         });
+    }
+}
+
+#[derive(Debug, derive_more::From, derive_more::Display, derive_more::TryInto)]
+pub enum Expressions<'a> {
+    #[from]
+    BinaryExpression(BinaryExpression<'a>),
+    #[from]
+    EqualityExpression(EqualityExpression<'a>),
+    #[from]
+    Group(Group<'a>),
+    #[from]
+    Identifier(Identifier<'a>),
+    #[from]
+    Literal(Literal<'a>),
+    #[from]
+    UnaryExpression(UnaryExpression<'a>),
+    #[from]
+    RelationalExpression(RelationalExpression<'a>),
+    #[from]
+    AssignmentExpression(AssignmentExpression<'a>),
+}
+
+impl Expression for Expressions<'_> {
+    fn line_number(&self) -> usize {
+        match self {
+            Expressions::BinaryExpression(binary_expression) => binary_expression.line_number(),
+            Expressions::EqualityExpression(equality_expression) => {
+                equality_expression.line_number()
+            }
+            Expressions::Group(group) => group.line_number(),
+            Expressions::Identifier(identifier) => identifier.line_number(),
+            Expressions::Literal(literal) => literal.line_number(),
+            Expressions::UnaryExpression(unary_expression) => unary_expression.line_number(),
+            Expressions::RelationalExpression(relation_expression) => {
+                relation_expression.line_number()
+            }
+            Expressions::AssignmentExpression(assignmpent_expression) => {
+                assignmpent_expression.line_number()
+            }
+        }
+    }
+}
+
+impl CodeGenerator for Expressions<'_> {
+    fn write_expression(
+        &mut self,
+        chunk: &mut Chunk,
+        dst_register: Option<u8>,
+        reserved_registers: Vec<u8>,
+    ) -> crate::compiler::Result {
+        match self {
+            Expressions::BinaryExpression(binary_expression) => {
+                binary_expression.write_expression(chunk, dst_register, reserved_registers)
+            }
+            Expressions::EqualityExpression(equality_expression) => {
+                equality_expression.write_expression(chunk, dst_register, reserved_registers)
+            }
+            Expressions::Group(group) => {
+                group.write_expression(chunk, dst_register, reserved_registers)
+            }
+            Expressions::Identifier(identifier) => {
+                identifier.write_expression(chunk, dst_register, reserved_registers)
+            }
+            Expressions::Literal(literal) => {
+                literal.write_expression(chunk, dst_register, reserved_registers)
+            }
+            Expressions::UnaryExpression(unary_expression) => {
+                unary_expression.write_expression(chunk, dst_register, reserved_registers)
+            }
+            Expressions::RelationalExpression(relation_expression) => {
+                relation_expression.write_expression(chunk, dst_register, reserved_registers)
+            }
+            Expressions::AssignmentExpression(assignment_expression) => {
+                assignment_expression.write_expression(chunk, dst_register, reserved_registers)
+            }
+        }
     }
 }

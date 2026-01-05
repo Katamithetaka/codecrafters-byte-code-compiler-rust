@@ -1,4 +1,5 @@
 #![allow(unused_variables)]
+use interpreter::compiler::CodeGenerator;
 use interpreter::compiler::chunk::Chunk;
 use interpreter::compiler::instructions::Instructions;
 use interpreter::compiler::vm::interpret;
@@ -112,13 +113,13 @@ fn main() {
             };
 
             let mut chunk = Chunk::new();
-            
+
             match v.write_expression(&mut chunk, Some(0), vec![]) {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(err) => {
                     eprintln!("{err}");
                     std::process::exit(70)
-                },
+                }
             }
             chunk.write_print(0, 123);
             chunk.write_instruction(Instructions::Return, 123);
@@ -130,7 +131,7 @@ fn main() {
                     std::process::exit(70)
                 }
             }
-        },
+        }
         "run" => {
             let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
                 eprintln!("Failed to read file {}", filename);
@@ -163,14 +164,14 @@ fn main() {
             };
 
             let mut chunk = Chunk::new();
-            
+
             for mut expr in v {
                 match expr.write_expression(&mut chunk, None, vec![]) {
-                    Ok(_) => {},
+                    Ok(_) => {}
                     Err(err) => {
                         eprintln!("{err}");
                         std::process::exit(70)
-                    },
+                    }
                 }
             }
             chunk.write_instruction(Instructions::Return, 123);
@@ -183,7 +184,6 @@ fn main() {
                 }
             }
         }
-    
 
         _ => {
             eprintln!("Unknown command: {}", command);

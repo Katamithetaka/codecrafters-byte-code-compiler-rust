@@ -3,13 +3,13 @@ use std::fmt::Display;
 use crate::{
     Token,
     compiler::{CodeGenerator, chunk::Chunk},
-    expressions::{Expression, Value, expect_ok},
+    expressions::{Expression, Expressions, Value, expect_ok},
     scanner::{Keyword, TokenKind, TokenValue},
 };
 
 #[derive(Debug)]
 pub struct Group<'a> {
-    expr: Box<dyn Expression + 'a>,
+    expr: Box<Expressions<'a>>,
 }
 
 impl<'a> Display for Group<'a> {
@@ -19,7 +19,7 @@ impl<'a> Display for Group<'a> {
 }
 
 impl<'a> Group<'a> {
-    pub fn new(expr: Box<dyn Expression + 'a>) -> Self {
+    pub fn new(expr: Box<Expressions<'a>>) -> Self {
         return Self { expr };
     }
 }
@@ -29,7 +29,6 @@ impl<'a> Expression for Group<'a> {
         self.expr.line_number()
     }
 }
-
 
 impl<'a> CodeGenerator for Group<'a> {
     fn write_expression(

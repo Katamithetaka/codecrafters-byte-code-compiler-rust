@@ -1,17 +1,19 @@
-use crate::{compiler::CodeGenerator, expressions::Expression, statements::Statement};
+use crate::{
+    compiler::CodeGenerator,
+    expressions::{Expression, Expressions},
+    statements::Statement,
+};
 
 #[derive(Debug)]
 pub struct PrintStatement<'a> {
-    expr: Box<dyn Expression + 'a>
+    expr: Expressions<'a>,
 }
 impl<'a> PrintStatement<'a> {
-    pub fn new(expr: Box<dyn Expression + 'a>) -> Self {
-        Self {
-            expr
-        }
+    pub fn new(expr: Expressions<'a>) -> Self {
+        Self { expr }
     }
 }
-impl Statement for PrintStatement<'_>{}
+impl Statement for PrintStatement<'_> {}
 
 impl CodeGenerator for PrintStatement<'_> {
     fn write_expression(
@@ -24,12 +26,11 @@ impl CodeGenerator for PrintStatement<'_> {
             Some(a) => a,
             None => reserved_registers.iter().max().copied().unwrap_or(0),
         };
-        
-        self.expr.write_expression(chunk, Some(dist), reserved_registers)?;
+
+        self.expr
+            .write_expression(chunk, Some(dist), reserved_registers)?;
         chunk.write_print(dist, self.expr.line_number() as i32);
-        
-        
-        
+
         Ok(())
     }
 }

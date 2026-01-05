@@ -3,7 +3,8 @@ use std::{collections::HashSet, fmt::Display, iter::Peekable};
 use crate::{
     Token, ast_parser,
     expressions::{
-        Expression,
+        Expression, Expressions,
+        assignment_expression::AssignmentExpression,
         binary_expression::{BinaryExpression, BinaryOp},
         equality_expression::{EqualityExpression, EqualityOp},
         group::{self, Group},
@@ -154,6 +155,8 @@ pub enum ParserErrorDetails {
     UnexpectedToken(TokenKind, String),
     #[error("Unexpecpected token {0}, expected {1}")]
     InvalidToken(TokenKind, TokenKind),
+    #[error("Invalid assignment target")]
+    InvalidAssignementTarget,
 }
 
 impl<'a> AstParser<'a> {
@@ -218,11 +221,30 @@ impl<'a> AstParser<'a> {
         });
     }
 
-    pub fn expression(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
-        self.equality()
+    pub fn expression(&mut self) -> Result<Expressions<'a>, ParserError> {
+        self.assignment()
     }
 
-    pub fn equality(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
+    pub fn assignment(&mut self) -> Result<Expressions<'a>, ParserError> {
+        let expr = self.equality()?;
+        if self.token_kind() == TokenKind::Equal {
+            self.advance();
+            let right = self.assignment()?;
+
+            match expr {
+                Expressions::Identifier(ident) => {
+                    return Ok(AssignmentExpression::new(ident, Box::new(right)).into());
+                }
+                _ => {
+                    return self.error(ParserErrorDetails::InvalidAssignementTarget);
+                }
+            }
+        }
+
+        return Ok(expr);
+    }
+
+    pub fn equality(&mut self) -> Result<Expressions<'a>, ParserError> {
         let mut rel = self.relational()?;
 
         while matches!(
@@ -237,14 +259,14 @@ impl<'a> AstParser<'a> {
 
             self.advance();
 
-            let right = self.relational()?;
-            rel = Box::new(EqualityExpression::new(op, rel, right));
+            let right = Box::new(self.relational()?);
+            rel = EqualityExpression::new(op, Box::new(rel), right).into();
         }
 
         Ok(rel)
     }
 
-    pub fn relational(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
+    pub fn relational(&mut self) -> Result<Expressions<'a>, ParserError> {
         let mut term = self.term()?;
 
         while matches!(
@@ -262,13 +284,13 @@ impl<'a> AstParser<'a> {
             self.advance();
 
             let right = self.term()?;
-            term = Box::new(RelationalExpression::new(op, term, right));
+            term = RelationalExpression::new(op, Box::new(term), Box::new(right)).into();
         }
 
         Ok(term)
     }
 
-    pub fn term(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
+    pub fn term(&mut self) -> Result<Expressions<'a>, ParserError> {
         let mut factor = self.factor()?;
 
         while matches!(self.token_kind(), TokenKind::Plus | TokenKind::Minus) {
@@ -281,13 +303,13 @@ impl<'a> AstParser<'a> {
             self.advance();
 
             let right = self.factor()?;
-            factor = Box::new(BinaryExpression::new(op, factor, right));
+            factor = BinaryExpression::new(op, Box::new(factor), Box::new(right)).into();
         }
 
         Ok(factor)
     }
 
-    pub fn factor(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
+    pub fn factor(&mut self) -> Result<Expressions<'a>, ParserError> {
         let mut unary = self.unary()?;
 
         while matches!(self.token_kind(), TokenKind::Slash | TokenKind::Star) {
@@ -300,34 +322,31 @@ impl<'a> AstParser<'a> {
             self.advance();
 
             let right = self.unary()?;
-            unary = Box::new(BinaryExpression::new(op, unary, right));
+            unary = BinaryExpression::new(op, Box::new(unary), Box::new(right)).into();
         }
 
         Ok(unary)
     }
 
-    pub fn unary(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
+    pub fn unary(&mut self) -> Result<Expressions<'a>, ParserError> {
         self.unexpected_eof()?;
         use crate::expressions::literal::Literal;
         match self.token_kind() {
             TokenKind::Bang => {
                 self.advance();
-                Ok(Box::new(UnaryExpression::new(UnaryOp::Bang, self.unary()?)))
+                Ok(UnaryExpression::new(UnaryOp::Bang, Box::new(self.unary()?)).into())
             }
             TokenKind::Minus => {
                 self.advance();
-                Ok(Box::new(UnaryExpression::new(
-                    UnaryOp::Minus,
-                    self.unary()?,
-                )))
+                Ok(UnaryExpression::new(UnaryOp::Minus, Box::new(self.unary()?)).into())
             }
             _ => self.primary(),
         }
     }
 
-    pub fn identifier(&mut self) -> Result<Box<Identifier<'a>>, ParserError> {
+    pub fn identifier(&mut self) -> Result<Identifier<'a>, ParserError> {
         match self.token_kind() {
-            TokenKind::Identifier => Ok(Box::new(Identifier::new(self.advance()))),
+            TokenKind::Identifier => Ok(Identifier::new(self.advance())),
             c => self.error(ParserErrorDetails::UnexpectedToken(
                 c,
                 "identifier".to_string(),
@@ -335,7 +354,7 @@ impl<'a> AstParser<'a> {
         }
     }
 
-    pub fn primary(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
+    pub fn primary(&mut self) -> Result<Expressions<'a>, ParserError> {
         self.unexpected_eof()?;
         use crate::expressions::literal::Literal;
         match self.token_kind() {
@@ -343,14 +362,14 @@ impl<'a> AstParser<'a> {
                 self.advance();
                 let expr = self.expression()?;
                 self.consume(TokenKind::RightParen)?;
-                Ok(Box::new(Group::new(expr)))
+                Ok(Group::new(Box::new(expr)).into())
             }
-            TokenKind::Number => Ok(Box::new(Literal::new(self.advance()))),
-            TokenKind::Keyword(Keyword::True) => Ok(Box::new(Literal::new(self.advance()))),
-            TokenKind::String => Ok(Box::new(Literal::new(self.advance()))),
-            TokenKind::Keyword(Keyword::False) => Ok(Box::new(Literal::new(self.advance()))),
-            TokenKind::Keyword(Keyword::Nil) => Ok(Box::new(Literal::new(self.advance()))),
-            TokenKind::Identifier => self.identifier().map(|i| i as Box<dyn Expression>),
+            TokenKind::Number => Ok((Literal::new(self.advance())).into()),
+            TokenKind::Keyword(Keyword::True) => Ok((Literal::new(self.advance())).into()),
+            TokenKind::String => Ok((Literal::new(self.advance())).into()),
+            TokenKind::Keyword(Keyword::False) => Ok((Literal::new(self.advance())).into()),
+            TokenKind::Keyword(Keyword::Nil) => Ok((Literal::new(self.advance())).into()),
+            TokenKind::Identifier => Ok(self.identifier()?.into()),
             c => self.error(ParserErrorDetails::UnexpectedToken(
                 c,
                 "primary".to_string(),

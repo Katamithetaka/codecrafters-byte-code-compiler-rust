@@ -1,7 +1,7 @@
 use crate::{
     compiler::CodeGenerator,
     expressions::{
-        Expression, Value,
+        Expression, Expressions, Value,
         identifier::{Identifier, IdentifierKind},
     },
     statements::Statement,
@@ -9,11 +9,11 @@ use crate::{
 
 #[derive(Debug)]
 pub struct DeclareStatement<'a> {
-    ident: Box<Identifier<'a>>,
-    expr: Option<Box<dyn Expression + 'a>>,
+    ident: Identifier<'a>,
+    expr: Option<Expressions<'a>>,
 }
 impl<'a> DeclareStatement<'a> {
-    pub fn new(ident: Box<Identifier<'a>>, expr: Option<Box<dyn Expression + 'a>>) -> Self {
+    pub fn new(ident: Identifier<'a>, expr: Option<Expressions<'a>>) -> Self {
         Self { ident, expr }
     }
 }

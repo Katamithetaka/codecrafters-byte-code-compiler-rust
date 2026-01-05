@@ -94,6 +94,12 @@ impl Chunk {
         ident.write_bytes(self, line)
     }
 
+    pub fn write_set_global(&mut self, ident: Varint, value_register: u8, line: i32) -> usize {
+        self.write_instruction(Instructions::SetGlobal, line);
+        self.write(value_register as u8, line);
+        ident.write_bytes(self, line)
+    }
+
     pub fn write_get_global(&mut self, ident: Varint, dst_register: u8, line: i32) -> usize {
         self.write_instruction(Instructions::GetGlobal, line);
         self.write(dst_register as u8, line);

@@ -205,6 +205,22 @@ pub fn interpret(chunk: &Chunk) -> Result<(), InterpretError> {
                     _ => panic!("FUCK YOUUUU"),
                 };
             }
+            Some(Instructions::SetGlobal) => {
+                let register = chunk.code[vm.ip];
+                vm.ip += 1;
+                let (constant, size) = Varint::read_bytes(chunk, vm.ip);
+                vm.ip += size;
+                let v = &chunk.value_array[constant as usize];
+                let variable = match v {
+                    crate::expressions::Value::String(a) => vm
+                        .global_variables
+                        .get_mut(a)
+                        .ok_or_else(|| InterpretError::UndefinedVariable(a.clone()))?,
+                    _ => panic!("FUCK YOUUUU"),
+                };
+
+                *variable = vm.registers[register as usize].clone();
+            }
             None => return Err(InterpretError::UnexpectedOpCode(instruction)),
         }
     }
