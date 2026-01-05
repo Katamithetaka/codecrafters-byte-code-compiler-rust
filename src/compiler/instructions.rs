@@ -19,21 +19,23 @@ pub enum Instructions {
     Eq = 13,
     Neq = 14,
     Print = 15,
+    DefineGlobal = 16,
+    GetGlobal = 17,
 }
 
 pub fn simple_instruction(name: &str, offset: usize) -> usize {
-    eprintln!("{name}");
+    eprintln!("{name:15}");
     return offset + 1;
 }
 
 pub fn print_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
-    eprintln!("{name} {:6}", chunk.code[offset + 1]);
+    eprintln!("{name:15} r{}", chunk.code[offset + 1]);
     return offset + 2;
 }
 
 pub fn constant_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     let (constant, o) = Varint::read_bytes(chunk, offset + 1);
-    eprint!("{name} {constant:4} ");
+    eprint!("{name:15} c{constant} ");
     print_value(&chunk.value_array[constant as usize]);
 
     return offset + o + 1;
@@ -42,7 +44,7 @@ pub fn constant_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
 pub fn load_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     let (constant, o) = Varint::read_bytes(chunk, offset + 2);
 
-    eprint!("{name} {:8} ", chunk.code[offset + 1]);
+    eprint!("{name:15} r{} c{} ", chunk.code[offset + 1], constant);
     print_value(&chunk.value_array[constant as usize]);
 
     return offset + 2 + o;
@@ -50,15 +52,16 @@ pub fn load_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
 
 pub fn unary_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     eprintln!(
-        "{name} {:6} {}",
+        "{name:15} r{} r{}",
         chunk.code[offset + 1],
         chunk.code[offset + 2]
     );
     return offset + 3;
 }
+
 pub fn binary_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     eprintln!(
-        "{name} {:6} {} {}",
+        "{name:15} r{} r{} r{}",
         chunk.code[offset + 1],
         chunk.code[offset + 2],
         chunk.code[offset + 3],
@@ -92,7 +95,9 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
         Some(Instructions::Gt) => binary_instruction("OP_GT", chunk, offset),
         Some(Instructions::GtEq) => binary_instruction("OP_GTEQ", chunk, offset),
         Some(Instructions::Print) => print_instruction("OP_PRINT", chunk, offset),
+        Some(Instructions::DefineGlobal) => load_instruction("OP_G_DEF", chunk, offset),
+        Some(Instructions::GetGlobal) => load_instruction("OP_G_GET", chunk, offset),
 
-        None => {offset + 1},
+        None => offset + 1,
     }
 }

@@ -1,10 +1,14 @@
 use std::fmt::{Debug, Display};
 
-use crate::{compiler::{CodeGenerator, chunk::Chunk}, expressions::binary_expression::BinaryOp};
+use crate::{
+    compiler::{CodeGenerator, chunk::Chunk},
+    expressions::binary_expression::BinaryOp,
+};
 
 pub mod binary_expression;
 pub mod equality_expression;
 pub mod group;
+pub mod identifier;
 pub mod literal;
 pub mod relation_expression;
 pub mod unary_expression;
@@ -125,6 +129,8 @@ pub enum EvaluateErrorDetails {
     UnaryNumberOp,
     #[error("Operands must be two numbers or two strings. ")]
     UnmatchedTypes,
+    #[error("Undefined variable: {0}")]
+    UndefinedVariable(String),
 }
 
 #[derive(thiserror::Error, Debug)]

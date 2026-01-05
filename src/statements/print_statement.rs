@@ -25,7 +25,7 @@ impl CodeGenerator for PrintStatement<'_> {
             None => reserved_registers.iter().max().copied().unwrap_or(0),
         };
         
-        self.expr.write_expression(chunk, Some(dist), reserved_registers);
+        self.expr.write_expression(chunk, Some(dist), reserved_registers)?;
         chunk.write_print(dist, self.expr.line_number() as i32);
         
         

@@ -29,9 +29,26 @@ impl Chunk {
         }
     }
 
+    pub fn get_constant(&mut self, value: &Value) -> Option<Varint> {
+        self.value_array.iter().position(|e| e == value).map(|v| {
+            return Varint(v as u32);
+        })
+    }
+
     pub fn add_constant(&mut self, value: Value) -> Varint {
         self.value_array.push(value);
-        return Varint((self.value_array.len() - 1).try_into().unwrap());
+        return Varint((self.value_array.len() - 1) as u32);
+    }
+
+    pub fn get_or_write_constant(&mut self, value: Value, line: i32) -> Varint {
+        match self.get_constant(&value) {
+            Some(constant) => constant,
+            None => {
+                let constant = self.add_constant(value);
+                self.write_constant(constant, line as i32);
+                constant
+            }
+        }
     }
 
     pub fn write(&mut self, byte: u8, line: i32) {
@@ -49,6 +66,7 @@ impl Chunk {
     }
 
     pub fn write_constant(&mut self, constant: Varint, line: i32) -> usize {
+        self.write_instruction(Instructions::Constant, line);
         constant.write_bytes(self, line)
     }
 
@@ -68,6 +86,18 @@ impl Chunk {
     pub fn write_print(&mut self, register_index: u8, line: i32) {
         self.write_instruction(Instructions::Print, line);
         self.write(register_index as u8, line);
+    }
+
+    pub fn write_declare_global(&mut self, ident: Varint, value_register: u8, line: i32) -> usize {
+        self.write_instruction(Instructions::DefineGlobal, line);
+        self.write(value_register as u8, line);
+        ident.write_bytes(self, line)
+    }
+
+    pub fn write_get_global(&mut self, ident: Varint, dst_register: u8, line: i32) -> usize {
+        self.write_instruction(Instructions::GetGlobal, line);
+        self.write(dst_register as u8, line);
+        ident.write_bytes(self, line)
     }
 
     pub fn write_unary(

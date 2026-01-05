@@ -3,9 +3,21 @@ use std::{collections::HashSet, fmt::Display, iter::Peekable};
 use crate::{
     Token, ast_parser,
     expressions::{
-        Expression, binary_expression::{BinaryExpression, BinaryOp}, equality_expression::{EqualityExpression, EqualityOp}, group::{self, Group}, relation_expression::{RelationalExpression, RelationalOp}, unary_expression::{UnaryExpression, UnaryOp}
+        Expression,
+        binary_expression::{BinaryExpression, BinaryOp},
+        equality_expression::{EqualityExpression, EqualityOp},
+        group::{self, Group},
+        identifier::Identifier,
+        relation_expression::{RelationalExpression, RelationalOp},
+        unary_expression::{UnaryExpression, UnaryOp},
     },
-    scanner::{Keyword, TokenKind}, statements::{Statement, expression_statement::ExprStatement, print_statement::{self, PrintStatement}},
+    scanner::{Keyword, TokenKind},
+    statements::{
+        Statement,
+        declare_statement::DeclareStatement,
+        expression_statement::ExprStatement,
+        print_statement::{self, PrintStatement},
+    },
 };
 
 pub struct LocalScope {
@@ -117,7 +129,6 @@ impl AstParserScope {
 }
 
 pub struct AstParser<'a> {
-    scope: AstParserScope,
     state: AstParserState<'a>,
 }
 
@@ -153,52 +164,6 @@ impl<'a> AstParser<'a> {
                 pos: 0,
                 tokens: tokens,
             },
-            scope: AstParserScope::GlobalScope,
-        }
-    }
-
-    pub fn get_parent_scope(&self) -> Option<&AstParserScope> {
-        return self.scope.get_parent_scope();
-    }
-
-    pub fn get_local_scope(&mut self) -> Option<&mut LocalScope> {
-        return self.scope.get_local_scope();
-    }
-
-    pub fn is_in_global_scope(&self) -> bool {
-        return self.scope.is_in_global_scope();
-    }
-
-    pub fn is_in_function_scope(&'a self) -> bool {
-        return self.scope.is_in_function_scope();
-    }
-
-    pub fn is_in_method_scope(&'a self) -> bool {
-        return self.scope.is_in_method_scope();
-    }
-
-    pub fn is_in_class_scope(&'a self) -> bool {
-        return self.scope.is_in_class_scope();
-    }
-
-    pub fn is_in_derived_class_scope(&'a self) -> bool {
-        return self.scope.is_in_derived_class_scope();
-    }
-
-    pub fn local_scope(self) -> Self {
-        Self {
-            scope: AstParserScope::LocalScope(Box::new(self.scope), LocalScope::new()),
-            state: self.state,
-        }
-    }
-
-    pub fn pop_scope(self) -> Self {
-        match self.scope.into_parent() {
-            Some(v) => Self {
-                scope: v,
-                state: self.state,
-            },
-            None => panic!("Tried to pop a scope that was already at global scope."),
         }
     }
 
@@ -214,7 +179,6 @@ impl<'a> AstParser<'a> {
     }
 
     pub fn consume(&mut self, token: TokenKind) -> Result<(), ParserError> {
-       
         if self.token_kind() == token {
             self.advance();
             return Ok(());
@@ -224,7 +188,7 @@ impl<'a> AstParser<'a> {
         }
     }
 
-    pub fn peek_or_last(&mut self) -> &Token<'a> {
+    pub fn peek_or_last(&mut self) -> &'a Token<'a> {
         return self
             .state
             .it
@@ -252,22 +216,6 @@ impl<'a> AstParser<'a> {
             error,
             line: self.line_number(),
         });
-    }
-
-    pub fn define_identifier(&mut self, s: &str) -> Result<(), ParserError> {
-        match self.get_local_scope() {
-            Some(scope) => {
-                if scope.idents.contains(s) {
-                    return self.error(ParserErrorDetails::RedefinedVariableInLocalScope(
-                        s.to_string(),
-                    ));
-                } else {
-                    scope.idents.insert(s.to_string());
-                    Ok(())
-                }
-            }
-            None => return Ok(()),
-        }
     }
 
     pub fn expression(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
@@ -377,6 +325,16 @@ impl<'a> AstParser<'a> {
         }
     }
 
+    pub fn identifier(&mut self) -> Result<Box<Identifier<'a>>, ParserError> {
+        match self.token_kind() {
+            TokenKind::Identifier => Ok(Box::new(Identifier::new(self.advance()))),
+            c => self.error(ParserErrorDetails::UnexpectedToken(
+                c,
+                "identifier".to_string(),
+            )),
+        }
+    }
+
     pub fn primary(&mut self) -> Result<Box<dyn Expression + 'a>, ParserError> {
         self.unexpected_eof()?;
         use crate::expressions::literal::Literal;
@@ -384,7 +342,7 @@ impl<'a> AstParser<'a> {
             TokenKind::LeftParen => {
                 self.advance();
                 let expr = self.expression()?;
-                self.consume(TokenKind::RightParen);
+                self.consume(TokenKind::RightParen)?;
                 Ok(Box::new(Group::new(expr)))
             }
             TokenKind::Number => Ok(Box::new(Literal::new(self.advance()))),
@@ -392,41 +350,67 @@ impl<'a> AstParser<'a> {
             TokenKind::String => Ok(Box::new(Literal::new(self.advance()))),
             TokenKind::Keyword(Keyword::False) => Ok(Box::new(Literal::new(self.advance()))),
             TokenKind::Keyword(Keyword::Nil) => Ok(Box::new(Literal::new(self.advance()))),
-
+            TokenKind::Identifier => self.identifier().map(|i| i as Box<dyn Expression>),
             c => self.error(ParserErrorDetails::UnexpectedToken(
                 c,
                 "primary".to_string(),
             )),
         }
     }
-    pub fn print_statement(&mut self) -> Result<Box<dyn Statement + 'a>, ParserError> {
+    pub fn print_statement(&mut self) -> Result<Box<PrintStatement<'a>>, ParserError> {
         let expr = self.expression()?;
         self.consume(TokenKind::Semicolon)?;
         let statement = PrintStatement::new(expr);
         Ok(Box::new(statement))
     }
-    
-    pub fn expr_statement(&mut self) -> Result<Box<dyn Statement + 'a>, ParserError> {
+
+    pub fn expr_statement(&mut self) -> Result<Box<ExprStatement<'a>>, ParserError> {
         let expr = self.expression()?;
         self.consume(TokenKind::Semicolon)?;
         let statement = ExprStatement::new(expr);
         Ok(Box::new(statement))
     }
-    
+
+    pub fn variable_declaration(&mut self) -> Result<Box<DeclareStatement<'a>>, ParserError> {
+        let ident = self.identifier()?;
+        let value = if self.token_kind() == TokenKind::Equal {
+            self.advance();
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(TokenKind::Semicolon)?;
+
+        let statement = DeclareStatement::new(ident, value);
+
+        return Ok(Box::new(statement));
+    }
+
+    pub fn declaration(&mut self) -> Result<Box<dyn Statement + 'a>, ParserError> {
+        match self.token_kind() {
+            TokenKind::Keyword(Keyword::Var) => {
+                self.advance();
+                self.variable_declaration().map(|i| i as Box<dyn Statement>)
+            }
+            _ => self.statement(),
+        }
+    }
+
     pub fn statement(&mut self) -> Result<Box<dyn Statement + 'a>, ParserError> {
         match self.token_kind() {
             TokenKind::Keyword(Keyword::Print) => {
                 self.advance();
-                self.print_statement()
-            },
-            _ => self.expr_statement()
+                self.print_statement().map(|i| i as Box<dyn Statement>)
+            }
+            _ => self.expr_statement().map(|i| i as Box<dyn Statement>),
         }
-    } 
-    
+    }
+
     pub fn parse(&mut self) -> Result<Vec<Box<dyn Statement + 'a>>, ParserError> {
         let mut result = vec![];
         while !matches!(self.token_kind(), TokenKind::EOF) {
-            result.push(self.statement()?);
+            result.push(self.declaration()?);
         }
         Ok(result)
     }

@@ -35,9 +35,6 @@ impl<'a> Expression for Literal<'a> {
     fn line_number(&self) -> usize {
         self.token.line
     }
-
-
-
 }
 
 impl<'a> CodeGenerator for Literal<'a> {
@@ -50,28 +47,34 @@ impl<'a> CodeGenerator for Literal<'a> {
         let constant = match self.token.token {
             TokenKind::Number => match self.token.value {
                 TokenValue::Number(v) => {
-                    let constant = chunk.add_constant(Value::Number(v));
+                    let constant =
+                        chunk.get_or_write_constant(Value::Number(v), self.line_number() as i32);
                     constant
                 }
                 _ => panic!("Got null token when evaluating literal"),
             },
             TokenKind::String => match self.token.value {
                 TokenValue::String(v) => {
-                    let constant = chunk.add_constant(Value::String(v.to_string()));
+                    let constant = chunk.get_or_write_constant(
+                        Value::String(v.to_string()),
+                        self.line_number() as i32,
+                    );
                     constant
                 }
                 _ => panic!("Got null token when evaluating literal"),
             },
             TokenKind::Keyword(Keyword::True) => {
-                let constant = chunk.add_constant(Value::Boolean(true));
+                let constant =
+                    chunk.get_or_write_constant(Value::Boolean(true), self.line_number() as i32);
                 constant
             }
             TokenKind::Keyword(Keyword::False) => {
-                let constant = chunk.add_constant(Value::Boolean(false));
+                let constant =
+                    chunk.get_or_write_constant(Value::Boolean(false), self.line_number() as i32);
                 constant
             }
             TokenKind::Keyword(Keyword::Nil) => {
-                let constant = chunk.add_constant(Value::Null);
+                let constant = chunk.get_or_write_constant(Value::Null, self.line_number() as i32);
                 constant
             }
             _ => panic!("Invalid token considered as literal"),
@@ -83,7 +86,7 @@ impl<'a> CodeGenerator for Literal<'a> {
             }
             None => {}
         };
-        
+
         Ok(())
     }
 }

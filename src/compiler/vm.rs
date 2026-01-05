@@ -1,4 +1,4 @@
-use std::io::Error;
+use std::{collections::HashMap, io::Error};
 
 use crate::compiler::{
     chunk::Chunk,
@@ -10,6 +10,7 @@ use crate::compiler::{
 pub struct Vm {
     pub ip: usize,
     pub registers: [Value; 256],
+    pub global_variables: HashMap<String, Value>,
 }
 
 impl Vm {
@@ -17,6 +18,7 @@ impl Vm {
         Self {
             ip: 0,
             registers: std::array::from_fn(|_| Value::Null),
+            global_variables: Default::default(),
         }
     }
 }
@@ -104,8 +106,10 @@ pub fn interpret(chunk: &Chunk) -> Result<(), InterpretError> {
             Some(Instructions::Constant) => {
                 let (constant, size) = Varint::read_bytes(chunk, vm.ip);
                 vm.ip += size;
-                let value = chunk.value_array[constant as usize].clone();
-                print_value(&value);
+                if DEBUG_TRACE_EXECUTION {
+                    let value = chunk.value_array[constant as usize].clone();
+                    print_value(&value);
+                }
             }
             Some(Instructions::Load) => {
                 let register = chunk.code[vm.ip];
@@ -172,6 +176,34 @@ pub fn interpret(chunk: &Chunk) -> Result<(), InterpretError> {
                 let register = chunk.code[vm.ip];
                 vm.ip += 1;
                 println!("{}", vm.registers[register as usize]);
+            }
+            Some(Instructions::DefineGlobal) => {
+                let register = chunk.code[vm.ip];
+                vm.ip += 1;
+                let (constant, size) = Varint::read_bytes(chunk, vm.ip);
+                vm.ip += size;
+                let v = &chunk.value_array[constant as usize];
+                match v {
+                    crate::expressions::Value::String(a) => vm
+                        .global_variables
+                        .insert(a.clone(), vm.registers[register as usize].clone()),
+                    _ => panic!("FUCK YOUUUU"),
+                };
+            }
+            Some(Instructions::GetGlobal) => {
+                let register = chunk.code[vm.ip];
+                vm.ip += 1;
+                let (constant, size) = Varint::read_bytes(chunk, vm.ip);
+                vm.ip += size;
+                let v = &chunk.value_array[constant as usize];
+                vm.registers[register as usize] = match v {
+                    crate::expressions::Value::String(a) => vm
+                        .global_variables
+                        .get(a)
+                        .ok_or_else(|| InterpretError::UndefinedVariable(a.clone()))?
+                        .clone(),
+                    _ => panic!("FUCK YOUUUU"),
+                };
             }
             None => return Err(InterpretError::UnexpectedOpCode(instruction)),
         }
