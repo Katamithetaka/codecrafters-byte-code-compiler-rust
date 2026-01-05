@@ -36,6 +36,7 @@ impl CodeGenerator for DeclareStatement<'_> {
                     expr.write_expression(chunk, Some(dist), reserved_registers)?;
                 } else {
                     let constant = chunk.get_or_write_constant(Value::Null, self.ident.line as i32);
+                    chunk.write_load(dist, constant, self.ident.line as i32);
                 }
 
                 let constant = chunk.get_or_write_constant(
