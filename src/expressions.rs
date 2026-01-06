@@ -115,6 +115,8 @@ pub enum EvaluateErrorDetails {
     InvalidStackPop,
     #[error("Stack overflow: Too many locals defined in local scopes")]
     StackOverflow,
+    #[error("Jump statement didn't fit in the boundaries of a u16")]
+    CodeTooLong,
 }
 
 #[derive(thiserror::Error, Debug)]

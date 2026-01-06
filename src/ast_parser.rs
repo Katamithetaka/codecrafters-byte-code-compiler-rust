@@ -15,7 +15,8 @@ use crate::{
     scanner::{Keyword, TokenKind},
     statements::{
         Statements, block_statement::BlockStatement, declare_statement::DeclareStatement,
-        expression_statement::ExprStatement, print_statement::PrintStatement,
+        expression_statement::ExprStatement, if_statement::IfStatement,
+        print_statement::PrintStatement,
     },
 };
 
@@ -249,15 +250,19 @@ impl<'a> AstParser<'a> {
         }
     }
 
+    pub fn group(&mut self) -> Result<Expressions<'a>, ParserError> {
+        let expr = self.expression()?;
+        self.consume(TokenKind::RightParen)?;
+        Ok(Group::new(Box::new(expr)).into())
+    }
+
     pub fn primary(&mut self) -> Result<Expressions<'a>, ParserError> {
         self.unexpected_eof()?;
         use crate::expressions::literal::Literal;
         match self.token_kind() {
             TokenKind::LeftParen => {
                 self.advance();
-                let expr = self.expression()?;
-                self.consume(TokenKind::RightParen)?;
-                Ok(Group::new(Box::new(expr)).into())
+                self.group()
             }
             TokenKind::Number => Ok((Literal::new(self.advance())).into()),
             TokenKind::Keyword(Keyword::True) => Ok((Literal::new(self.advance())).into()),
@@ -324,11 +329,35 @@ impl<'a> AstParser<'a> {
         Ok(BlockStatement::new(statements, begin_line, end_line))
     }
 
+    pub fn if_statement(&mut self) -> Result<IfStatement<'a>, ParserError> {
+        self.consume(TokenKind::LeftParen)?;
+        let expression = self.group()?;
+        let statement = self.statement()?;
+        let mut statements = vec![(Some(expression), statement, self.line_number())];
+
+        while self.token_kind() == TokenKind::Keyword(Keyword::Else) {
+            self.advance();
+            if self.token_kind() == TokenKind::Keyword(Keyword::If) {
+                self.advance();
+                self.consume(TokenKind::LeftParen)?;
+                statements.push((Some(self.group()?), self.statement()?, self.line_number()));
+            } else {
+                statements.push((None, self.statement()?, self.line_number()));
+            }
+        }
+
+        return Ok(IfStatement::new(statements));
+    }
+
     pub fn statement(&mut self) -> Result<Statements<'a>, ParserError> {
         match self.token_kind() {
             TokenKind::Keyword(Keyword::Print) => {
                 self.advance();
                 Ok(self.print_statement()?.into())
+            }
+            TokenKind::Keyword(Keyword::If) => {
+                self.advance();
+                Ok(self.if_statement()?.into())
             }
             TokenKind::LeftBrace => {
                 self.advance();

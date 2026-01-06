@@ -50,7 +50,10 @@ macro_rules! binary_op {
             let v_1 = $vm.registers[register_1 as usize].as_binary_number_op()?;
 
             $vm.registers[dst_register as usize] = Value::Number(v_0 $op v_1);
-            print_value(&$vm.registers[dst_register as usize]);
+            if DEBUG_TRACE_EXECUTION {
+                print_value(&$vm.registers[dst_register as usize]);
+            }
+
         }
     };
 }
@@ -68,7 +71,10 @@ macro_rules! eq_op {
 
 
             $vm.registers[dst_register as usize] = Value::Boolean($vm.registers[register_0 as usize] $op $vm.registers[register_1 as usize]);
-            print_value(&$vm.registers[dst_register as usize]);
+            if DEBUG_TRACE_EXECUTION {
+                print_value(&$vm.registers[dst_register as usize]);
+            }
+
         }
     };
 }
@@ -87,7 +93,10 @@ macro_rules! cmp_op {
             let v_1 = $vm.registers[register_1 as usize].as_binary_number_op()?;
 
             $vm.registers[dst_register as usize] = Value::Boolean(v_0 $op v_1);
-            print_value(&$vm.registers[dst_register as usize]);
+            if DEBUG_TRACE_EXECUTION {
+                print_value(&$vm.registers[dst_register as usize]);
+            }
+
         }
     };
 }
@@ -119,7 +128,9 @@ pub fn execute_instruction(
             vm.ip += 1;
             let v = vm.registers[register as usize].as_number()?;
             vm.registers[dst_register as usize] = Value::Number(-v);
-            print_value(&vm.registers[dst_register as usize]);
+            if DEBUG_TRACE_EXECUTION {
+                print_value(&vm.registers[dst_register as usize]);
+            }
         }
         Instructions::Bang => {
             let register = chunk.code[vm.ip];
@@ -129,7 +140,9 @@ pub fn execute_instruction(
 
             vm.registers[dst_register as usize] =
                 Value::Boolean(!vm.registers[register as usize].is_truthy());
-            print_value(&vm.registers[dst_register as usize]);
+            if DEBUG_TRACE_EXECUTION {
+                print_value(&vm.registers[dst_register as usize]);
+            }
         }
         Instructions::Add => {
             let register_0 = chunk.code[vm.ip];
@@ -149,7 +162,9 @@ pub fn execute_instruction(
                 }
                 (_, _) => return Err(InterpretError::UnmatchedTypes),
             };
-            print_value(&vm.registers[dst_register as usize]);
+            if DEBUG_TRACE_EXECUTION {
+                print_value(&vm.registers[dst_register as usize]);
+            }
         }
         Instructions::Sub => binary_op!(chunk, vm, -),
         Instructions::Mul => binary_op!(chunk, vm, *),
@@ -311,6 +326,16 @@ pub fn execute_instruction(
             }
 
             vm.stack[index as usize] = vm.registers[output_register as usize].clone();
+        }
+        Instructions::JumpIfFalse => {
+            let register = chunk.code[vm.ip];
+            vm.ip += 1;
+            let jmp_addr = u16::from_be_bytes([chunk.code[vm.ip], chunk.code[vm.ip + 1]]);
+            vm.ip += 2;
+
+            if !vm.registers[register as usize].is_truthy() {
+                vm.ip = jmp_addr as usize;
+            }
         }
     }
 

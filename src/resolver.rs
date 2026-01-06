@@ -15,7 +15,8 @@ use crate::{
     },
     statements::{
         Statements, block_statement::BlockStatement, declare_statement::DeclareStatement,
-        expression_statement::ExprStatement, print_statement::PrintStatement,
+        expression_statement::ExprStatement, if_statement::IfStatement,
+        print_statement::PrintStatement,
     },
 };
 
@@ -394,6 +395,22 @@ impl Resolver {
         Ok(declare.into())
     }
 
+    pub fn visit_if<'a>(
+        &mut self,
+        statement: IfStatement<'a>,
+    ) -> Result<Statements<'a>, ParserError> {
+        let mut new_statements = vec![];
+        for (expr, stat, l) in statement.statements {
+            new_statements.push((
+                expr.map(|expr| self.resolve_expr(expr)).transpose()?,
+                self.resolve_statement(stat)?,
+                l,
+            ));
+        }
+
+        return Ok(IfStatement::new(new_statements).into());
+    }
+
     pub fn resolve_statement<'a>(
         &mut self,
         statement: Statements<'a>,
@@ -405,6 +422,7 @@ impl Resolver {
             Statements::BlockStatement(block_statement) => self.visit_block(block_statement),
             Statements::ExprStatement(expr_statement) => self.visit_expr(expr_statement),
             Statements::PrintStatement(print_statement) => self.visit_print(print_statement),
+            Statements::IfStatement(if_statement) => self.visit_if(if_statement),
         }
     }
 

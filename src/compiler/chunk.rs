@@ -1,3 +1,5 @@
+use std::num::TryFromIntError;
+
 use crate::{
     compiler::{
         instructions::{Instructions, disassemble_instruction},
@@ -84,6 +86,23 @@ impl<'a> Chunk<'a> {
         self.write_instruction(Instructions::Load, line);
         self.write(register_index as u8, line);
         constant.write_bytes(self, line)
+    }
+
+    pub fn write_jump_if_false_placeholder(&mut self, register_index: u8, line: i32) -> usize {
+        self.write_instruction(Instructions::JumpIfFalse, line);
+        self.write(register_index as u8, line);
+        let return_val = self.code.len();
+        self.write(0xFF as u8, line);
+        self.write(0xFF as u8, line);
+        return_val
+    }
+
+    pub fn update_jump_if_false(&mut self, index: usize) -> Result<(), TryFromIntError> {
+        let current_offset: u16 = self.code.len().try_into()?;
+        let values: [u8; 2] = current_offset.to_be_bytes(); // IT IS NOW DECIDED THAT WE USE BIG ENDIAN LMAO
+        self.code[index] = values[0];
+        self.code[index + 1] = values[1];
+        Ok(())
     }
 
     pub fn write_print(&mut self, register_index: u8, line: i32) {

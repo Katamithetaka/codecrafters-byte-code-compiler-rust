@@ -4,13 +4,15 @@ use crate::{
     compiler::CodeGenerator,
     statements::{
         block_statement::BlockStatement, declare_statement::DeclareStatement,
-        expression_statement::ExprStatement, print_statement::PrintStatement,
+        expression_statement::ExprStatement, if_statement::IfStatement,
+        print_statement::PrintStatement,
     },
 };
 
 pub mod block_statement;
 pub mod declare_statement;
 pub mod expression_statement;
+pub mod if_statement;
 pub mod print_statement;
 
 pub trait Statement<'a>: Debug + CodeGenerator<'a> {}
@@ -21,6 +23,7 @@ pub enum Statements<'a> {
     BlockStatement(BlockStatement<'a>),
     ExprStatement(ExprStatement<'a>),
     PrintStatement(PrintStatement<'a>),
+    IfStatement(IfStatement<'a>),
 }
 
 impl<'a> Statement<'a> for Statements<'a> {}
@@ -43,6 +46,9 @@ impl<'a> CodeGenerator<'a> for Statements<'a> {
                 statement.write_expression(chunk, dst_register, reserved_registers)
             }
             Statements::PrintStatement(statement) => {
+                statement.write_expression(chunk, dst_register, reserved_registers)
+            }
+            Statements::IfStatement(statement) => {
                 statement.write_expression(chunk, dst_register, reserved_registers)
             }
         }

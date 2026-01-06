@@ -27,6 +27,7 @@ pub enum Instructions {
     DefineLocal = 21,
     GetLocal = 22,
     SetLocal = 23,
+    JumpIfFalse = 24,
 }
 
 pub fn simple_instruction(name: &str, offset: usize) -> usize {
@@ -93,6 +94,14 @@ pub fn stack_access_instruction(name: &str, chunk: &Chunk, offset: usize) -> usi
     return offset + o + 2;
 }
 
+pub fn jmp_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+    let register = chunk.code[offset + 1];
+    let jmp_addr = u16::from_be_bytes([chunk.code[offset + 2], chunk.code[offset + 3]]);
+    eprintln!("{name:15} r{} addr[{}]", register, jmp_addr);
+
+    return offset + 4;
+}
+
 pub fn disassemble_instruction(chunk: &Chunk, offset: usize, previous_offset: usize) -> usize {
     eprint!("{offset:04}");
     if offset > 0 && chunk.get_line(offset) == chunk.get_line(previous_offset) {
@@ -129,6 +138,8 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize, previous_offset: us
         Some(Instructions::DefineLocal) => single_register_instruction("OP_S_DEF", chunk, offset),
         Some(Instructions::GetLocal) => stack_access_instruction("OP_S_GET", chunk, offset),
         Some(Instructions::SetLocal) => stack_access_instruction("OP_S_SET", chunk, offset),
+        Some(Instructions::JumpIfFalse) => jmp_instruction("OP_JMP_F", chunk, offset),
+
         None => offset + 1,
     }
 }
