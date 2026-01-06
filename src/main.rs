@@ -3,6 +3,7 @@ use interpreter::compiler::CodeGenerator;
 use interpreter::compiler::chunk::Chunk;
 use interpreter::compiler::instructions::Instructions;
 use interpreter::compiler::vm::interpret;
+use interpreter::resolver::Resolver;
 use interpreter::*;
 use std::env;
 use std::fs;
@@ -152,8 +153,13 @@ fn main() {
                 }
             };
 
+            let mut resolver = Resolver::new();
+
             let mut parser = AstParser::new(&tokens);
-            let v = parser.parse();
+            let v = parser
+                .parse()
+                .map(|tokens| resolver.resolve_statements(tokens))
+                .flatten();
 
             let v = match v {
                 Ok(ok) => ok,
@@ -176,6 +182,7 @@ fn main() {
             }
             chunk.write_instruction(Instructions::Return, 123);
             chunk.disassemble("eval chunk");
+            eprintln!("~eval chunk");
             match interpret(&chunk) {
                 Ok(()) => {}
                 Err(err) => {

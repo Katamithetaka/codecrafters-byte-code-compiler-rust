@@ -6,26 +6,23 @@ use crate::{
 
 #[derive(Debug)]
 pub struct PrintStatement<'a> {
-    expr: Expressions<'a>,
+    pub expr: Expressions<'a>,
 }
 impl<'a> PrintStatement<'a> {
     pub fn new(expr: Expressions<'a>) -> Self {
         Self { expr }
     }
 }
-impl Statement for PrintStatement<'_> {}
+impl<'a> Statement<'a> for PrintStatement<'a> {}
 
-impl CodeGenerator for PrintStatement<'_> {
+impl<'a> CodeGenerator<'a> for PrintStatement<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut crate::compiler::chunk::Chunk,
+        chunk: &mut crate::compiler::chunk::Chunk<'a>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
-        let dist = match dst_register {
-            Some(a) => a,
-            None => reserved_registers.iter().max().copied().unwrap_or(0),
-        };
+        let dist = self.dst_or_default(dst_register, &reserved_registers);
 
         self.expr
             .write_expression(chunk, Some(dist), reserved_registers)?;

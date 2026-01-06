@@ -1,6 +1,7 @@
-pub type Value = crate::expressions::Value;
-pub type ValueArray = Vec<Value>;
+use std::fmt::Display;
 
-pub fn print_value(value: &Value) {
+use crate::expressions::Value;
+
+pub fn print_value<S: Display>(value: &Value<S>) {
     eprintln!("'{value}'");
 }

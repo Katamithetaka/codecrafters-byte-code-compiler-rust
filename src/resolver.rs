@@ -1,0 +1,426 @@
+use std::collections::HashMap;
+
+use crate::{
+    ParserError,
+    ast_parser::ParserErrorDetails,
+    expressions::{
+        Expressions,
+        assignment_expression::AssignmentExpression,
+        binary_expression::BinaryExpression,
+        equality_expression::EqualityExpression,
+        group::Group,
+        identifier::{Identifier, IdentifierKind},
+        relation_expression::RelationalExpression,
+        unary_expression::UnaryExpression,
+    },
+    statements::{
+        Statements, block_statement::BlockStatement, declare_statement::DeclareStatement,
+        expression_statement::ExprStatement, print_statement::PrintStatement,
+    },
+};
+
+pub struct LocalScope {
+    idents: HashMap<String, (u8, u8)>,
+}
+
+impl LocalScope {
+    pub fn new() -> Self {
+        Self {
+            idents: HashMap::new(),
+        }
+    }
+
+    pub fn declare_identifier(
+        &mut self,
+        name: &mut Identifier,
+        depth: u8,
+        stack_index: u8,
+    ) -> Result<(), ParserError> {
+        if self.idents.contains_key(name.token) {
+            return Err(ParserError {
+                error: ParserErrorDetails::RedefinedVariableInLocalScope(name.token.to_string()),
+                line: name.line,
+            });
+        }
+        name.kind = IdentifierKind::LocalScope {
+            depth: depth as usize,
+            index: stack_index,
+        };
+
+        self.idents
+            .insert(name.token.to_string(), (depth, stack_index));
+
+        Ok(())
+    }
+}
+
+impl Default for LocalScope {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub enum ResolverScope {
+    GlobalScope,
+    LocalScope(Box<ResolverScope>, LocalScope),
+    FunctionBody(Box<ResolverScope>, LocalScope),
+    ClassBody(Box<ResolverScope>, LocalScope),
+    DerivedClassBody(Box<ResolverScope>, LocalScope),
+    MethodBody(Box<ResolverScope>, LocalScope),
+}
+
+impl ResolverScope {
+    pub fn get_parent_scope(&self) -> Option<&ResolverScope> {
+        match self {
+            ResolverScope::GlobalScope => return None,
+            ResolverScope::LocalScope(ast_parser, _) => Some(ast_parser),
+            ResolverScope::FunctionBody(ast_parser, _) => Some(ast_parser),
+            ResolverScope::ClassBody(ast_parser, _) => Some(ast_parser),
+            ResolverScope::DerivedClassBody(ast_parser, _) => Some(ast_parser),
+            ResolverScope::MethodBody(ast_parser, _) => Some(ast_parser),
+        }
+    }
+
+    pub fn into_parent(self) -> Option<ResolverScope> {
+        match self {
+            ResolverScope::GlobalScope => return None,
+            ResolverScope::LocalScope(ast_parser, _) => Some(*ast_parser),
+            ResolverScope::FunctionBody(ast_parser, _) => Some(*ast_parser),
+            ResolverScope::ClassBody(ast_parser, _) => Some(*ast_parser),
+            ResolverScope::DerivedClassBody(ast_parser, _) => Some(*ast_parser),
+            ResolverScope::MethodBody(ast_parser, _) => Some(*ast_parser),
+        }
+    }
+
+    pub fn get_local_scope_mut(&mut self) -> Option<&mut LocalScope> {
+        match self {
+            ResolverScope::GlobalScope => return None,
+            ResolverScope::LocalScope(_, local_scope) => Some(local_scope),
+            ResolverScope::FunctionBody(_, local_scope) => Some(local_scope),
+            ResolverScope::ClassBody(_, local_scope) => Some(local_scope),
+            ResolverScope::DerivedClassBody(_, local_scope) => Some(local_scope),
+            ResolverScope::MethodBody(_, local_scope) => Some(local_scope),
+        }
+    }
+
+    pub fn get_local_scope(&self) -> Option<&LocalScope> {
+        match self {
+            ResolverScope::GlobalScope => return None,
+            ResolverScope::LocalScope(_, local_scope) => Some(local_scope),
+            ResolverScope::FunctionBody(_, local_scope) => Some(local_scope),
+            ResolverScope::ClassBody(_, local_scope) => Some(local_scope),
+            ResolverScope::DerivedClassBody(_, local_scope) => Some(local_scope),
+            ResolverScope::MethodBody(_, local_scope) => Some(local_scope),
+        }
+    }
+
+    pub fn is_in_global_scope(&self) -> bool {
+        return matches!(self, ResolverScope::GlobalScope);
+    }
+
+    pub fn is_in_function_scope(&self) -> bool {
+        return matches!(
+            self,
+            ResolverScope::FunctionBody(_, _) | ResolverScope::MethodBody(_, _)
+        ) || match self.get_parent_scope() {
+            Some(v) => v.is_in_function_scope(),
+            None => false,
+        };
+    }
+
+    pub fn is_in_method_scope(&self) -> bool {
+        return matches!(self, ResolverScope::MethodBody(_, _))
+            || match self.get_parent_scope() {
+                Some(v) => v.is_in_method_scope(),
+                None => false,
+            };
+    }
+
+    pub fn is_in_class_scope(&self) -> bool {
+        return matches!(
+            self,
+            ResolverScope::ClassBody(_, _) | ResolverScope::DerivedClassBody(_, _)
+        ) || match self.get_parent_scope() {
+            Some(v) => v.is_in_class_scope(),
+            None => false,
+        };
+    }
+
+    pub fn is_in_derived_class_scope(&self) -> bool {
+        return matches!(self, ResolverScope::DerivedClassBody(_, _))
+            || match self.get_parent_scope() {
+                Some(v) => v.is_in_derived_class_scope(),
+                None => false,
+            };
+    }
+
+    pub fn get_local_identifier(&self, name: &str) -> Option<(u8, u8)> {
+        match self.get_local_scope() {
+            Some(scope) => scope.idents.get(name).copied().or_else(|| {
+                self.get_parent_scope()
+                    .map(|parent| parent.get_local_identifier(name))
+                    .flatten()
+            }),
+            None => None,
+        }
+    }
+}
+
+pub struct Resolver {
+    scope: ResolverScope,
+    stack_index: u8,
+    stack: Vec<u8>,
+}
+
+impl Resolver {
+    pub fn new() -> Self {
+        Self {
+            scope: ResolverScope::GlobalScope,
+            stack_index: 0,
+            stack: vec![],
+        }
+    }
+
+    pub fn push_scope(&mut self) -> ResolverScope {
+        let old_scope = std::mem::replace(
+            &mut self.scope,
+            ResolverScope::GlobalScope, // or some dummy value
+        );
+
+        self.stack.push(self.stack_index);
+
+        old_scope
+    }
+
+    pub fn push_local_scope(&mut self) {
+        let old_scope = self.push_scope();
+
+        self.scope = ResolverScope::LocalScope(Box::new(old_scope), LocalScope::new());
+    }
+
+    pub fn push_function_scope(&mut self) {
+        let old_scope = self.push_scope();
+
+        self.scope = ResolverScope::FunctionBody(Box::new(old_scope), LocalScope::new());
+    }
+
+    pub fn push_class_scope(&mut self) {
+        let old_scope = self.push_scope();
+        self.scope = ResolverScope::ClassBody(Box::new(old_scope), LocalScope::new());
+    }
+
+    pub fn push_derived_class_scope(&mut self) {
+        let old_scope = self.push_scope();
+
+        self.scope = ResolverScope::DerivedClassBody(Box::new(old_scope), LocalScope::new());
+    }
+
+    pub fn push_method_scope(&mut self) {
+        let old_scope = std::mem::replace(
+            &mut self.scope,
+            ResolverScope::GlobalScope, // or some dummy value
+        );
+
+        self.stack.push(self.stack_index);
+
+        self.scope = ResolverScope::MethodBody(Box::new(old_scope), LocalScope::new());
+    }
+
+    pub fn pop_scope(&mut self) {
+        let old_scope = std::mem::replace(
+            &mut self.scope,
+            ResolverScope::GlobalScope, // or some dummy value
+        );
+
+        self.scope = match old_scope.into_parent() {
+            Some(s) => s,
+            None => panic!("Tried to pop GlobalScope!"),
+        };
+
+        self.stack_index = self.stack.pop().unwrap();
+    }
+
+    pub fn resolve_binary<'a>(
+        &mut self,
+        binary_expression: BinaryExpression<'a>,
+    ) -> Result<Expressions<'a>, ParserError> {
+        Ok(BinaryExpression::new(
+            binary_expression.op,
+            Box::new(self.resolve_expr(*binary_expression.lhs)?),
+            Box::new(self.resolve_expr(*binary_expression.rhs)?),
+        )
+        .into())
+    }
+
+    pub fn resolve_equality<'a>(
+        &mut self,
+        binary_expression: EqualityExpression<'a>,
+    ) -> Result<Expressions<'a>, ParserError> {
+        Ok(EqualityExpression::new(
+            binary_expression.op,
+            Box::new(self.resolve_expr(*binary_expression.lhs)?),
+            Box::new(self.resolve_expr(*binary_expression.rhs)?),
+        )
+        .into())
+    }
+
+    pub fn resolve_relation<'a>(
+        &mut self,
+        binary_expression: RelationalExpression<'a>,
+    ) -> Result<Expressions<'a>, ParserError> {
+        Ok(RelationalExpression::new(
+            binary_expression.op,
+            Box::new(self.resolve_expr(*binary_expression.lhs)?),
+            Box::new(self.resolve_expr(*binary_expression.rhs)?),
+        )
+        .into())
+    }
+
+    pub fn resolve_assignment<'a>(
+        &mut self,
+        binary_expression: AssignmentExpression<'a>,
+    ) -> Result<Expressions<'a>, ParserError> {
+        Ok(AssignmentExpression::new(
+            self.resolve_identifier(binary_expression.lhs)?,
+            Box::new(self.resolve_expr(*binary_expression.rhs)?),
+        )
+        .into())
+    }
+
+    pub fn resolve_unary<'a>(
+        &mut self,
+        unary_expression: UnaryExpression<'a>,
+    ) -> Result<Expressions<'a>, ParserError> {
+        Ok(UnaryExpression::new(
+            unary_expression.op,
+            Box::new(self.resolve_expr(*unary_expression.rhs)?),
+        )
+        .into())
+    }
+
+    pub fn resolve_group<'a>(
+        &mut self,
+        unary_expression: Group<'a>,
+    ) -> Result<Expressions<'a>, ParserError> {
+        Ok(Group::new(Box::new(self.resolve_expr(*unary_expression.expr)?)).into())
+    }
+
+    pub fn resolve_identifier<'a>(
+        &mut self,
+        mut ident: Identifier<'a>,
+    ) -> Result<Identifier<'a>, ParserError> {
+        match self.scope.get_local_identifier(ident.token) {
+            Some(index) => {
+                ident.kind = IdentifierKind::LocalScope {
+                    depth: index.0 as usize,
+                    index: index.1,
+                };
+                Ok(ident.into())
+            }
+            None => Ok(ident.into()),
+        }
+    }
+
+    pub fn resolve_expr<'a>(
+        &mut self,
+        expr: Expressions<'a>,
+    ) -> Result<Expressions<'a>, ParserError> {
+        match expr {
+            Expressions::Identifier(ident) => Ok(self.resolve_identifier(ident)?.into()),
+            Expressions::Group(expr) => self.resolve_group(expr),
+            Expressions::BinaryExpression(expr) => self.resolve_binary(expr),
+            Expressions::AssignmentExpression(expr) => self.resolve_assignment(expr),
+            Expressions::RelationalExpression(expr) => Ok(self.resolve_relation(expr)?.into()),
+            Expressions::EqualityExpression(expr) => Ok(self.resolve_equality(expr)?.into()),
+            Expressions::UnaryExpression(expr) => Ok(self.resolve_unary(expr)?.into()),
+            Expressions::Literal(_) => Ok(expr),
+        }
+    }
+
+    pub fn visit_block<'a>(
+        &mut self,
+        block: BlockStatement<'a>,
+    ) -> Result<Statements<'a>, ParserError> {
+        self.push_local_scope();
+        let block = BlockStatement::new(
+            self.resolve_statements(block.statements)?,
+            block.begin_line,
+            block.end_line,
+        );
+        self.pop_scope();
+        Ok(block.into())
+    }
+
+    pub fn visit_expr<'a>(
+        &mut self,
+        expr: ExprStatement<'a>,
+    ) -> Result<Statements<'a>, ParserError> {
+        let expr = ExprStatement::new(self.resolve_expr(expr.expr)?);
+        Ok(expr.into())
+    }
+
+    pub fn visit_print<'a>(
+        &mut self,
+        print: PrintStatement<'a>,
+    ) -> Result<Statements<'a>, ParserError> {
+        let print = PrintStatement::new(self.resolve_expr(print.expr)?);
+        Ok(print.into())
+    }
+
+    pub fn visit_declare<'a>(
+        &mut self,
+        mut declare: DeclareStatement<'a>,
+    ) -> Result<Statements<'a>, ParserError> {
+        match self.scope.get_local_scope_mut() {
+            Some(v) => {
+                v.declare_identifier(
+                    &mut declare.ident,
+                    self.stack.len() as u8,
+                    self.stack_index - self.stack.last().unwrap(),
+                )?;
+                self.stack_index += 1;
+            }
+            None => {}
+        };
+
+        let declare = DeclareStatement::new(
+            declare.ident,
+            match declare.expr {
+                Some(a) => Some(self.resolve_expr(a)?),
+                None => None,
+            },
+        );
+
+        Ok(declare.into())
+    }
+
+    pub fn resolve_statement<'a>(
+        &mut self,
+        statement: Statements<'a>,
+    ) -> Result<Statements<'a>, ParserError> {
+        match statement {
+            Statements::DeclareStatement(declare_statement) => {
+                self.visit_declare(declare_statement)
+            }
+            Statements::BlockStatement(block_statement) => self.visit_block(block_statement),
+            Statements::ExprStatement(expr_statement) => self.visit_expr(expr_statement),
+            Statements::PrintStatement(print_statement) => self.visit_print(print_statement),
+        }
+    }
+
+    pub fn resolve_statements<'a>(
+        &mut self,
+        statements: Vec<Statements<'a>>,
+    ) -> Result<Vec<Statements<'a>>, ParserError> {
+        statements
+            .into_iter()
+            .map(|stmt| self.resolve_statement(stmt))
+            .collect()
+    }
+}
+
+impl Default for Resolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}

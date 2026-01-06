@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::{
     compiler::{CodeGenerator, chunk::Chunk, instructions::Instructions},
-    expressions::{Expression, Expressions, Value, expect_ok},
+    expressions::{Expression, Expressions},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -38,18 +38,18 @@ impl<'a> UnaryExpression<'a> {
     }
 }
 
-impl<'a> Expression for UnaryExpression<'a> {
+impl<'a> Expression<'a> for UnaryExpression<'a> {
     fn line_number(&self) -> usize {
         self.rhs.line_number()
     }
 }
 
-impl<'a> CodeGenerator for UnaryExpression<'a> {
+impl<'a> CodeGenerator<'a> for UnaryExpression<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut Chunk,
+        chunk: &mut Chunk<'a>,
         dst_register: Option<u8>,
-        mut reserved_registers: Vec<u8>,
+        reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
         let my_dst_register = match dst_register {
             Some(v) => v,

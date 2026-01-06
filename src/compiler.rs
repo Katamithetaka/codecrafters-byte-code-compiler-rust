@@ -8,10 +8,10 @@ pub mod vm;
 
 pub const BINARY_FORMAT: u8 = 1;
 pub type Result = std::result::Result<(), crate::expressions::EvaluateError>;
-pub trait CodeGenerator {
+pub trait CodeGenerator<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut Chunk,
+        chunk: &mut Chunk<'a>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> Result;
@@ -30,7 +30,7 @@ pub mod macros {
                     None => $reserved_registers.iter().max().copied().unwrap_or(0) + 1, // this can be assumed to never happen
                 };
 
-                let mut reserved_0 = $reserved_registers.clone();
+                let reserved_0 = $reserved_registers.clone();
 
                 let mut reserved_1 = $reserved_registers.clone();
                 reserved_1.push(my_dst_register_0);

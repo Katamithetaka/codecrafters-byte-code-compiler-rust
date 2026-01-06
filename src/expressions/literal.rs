@@ -3,13 +3,13 @@ use std::fmt::Display;
 use crate::{
     Token,
     compiler::{CodeGenerator, chunk::Chunk},
-    expressions::{Expression, Value, expect_ok},
+    expressions::{Expression, Value},
     scanner::{Keyword, TokenKind, TokenValue},
 };
 
 #[derive(Debug)]
 pub struct Literal<'a> {
-    token: &'a Token<'a>,
+    pub token: &'a Token<'a>,
 }
 
 impl<'a> Display for Literal<'a> {
@@ -31,18 +31,18 @@ impl<'a> Literal<'a> {
     }
 }
 
-impl<'a> Expression for Literal<'a> {
+impl<'a> Expression<'a> for Literal<'a> {
     fn line_number(&self) -> usize {
         self.token.line
     }
 }
 
-impl<'a> CodeGenerator for Literal<'a> {
+impl<'a> CodeGenerator<'a> for Literal<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut Chunk,
+        chunk: &mut Chunk<'a>,
         dst_register: Option<u8>,
-        reserved_registers: Vec<u8>,
+        _reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
         let constant = match self.token.token {
             TokenKind::Number => match self.token.value {
@@ -55,10 +55,8 @@ impl<'a> CodeGenerator for Literal<'a> {
             },
             TokenKind::String => match self.token.value {
                 TokenValue::String(v) => {
-                    let constant = chunk.get_or_write_constant(
-                        Value::String(v.to_string()),
-                        self.line_number() as i32,
-                    );
+                    let constant =
+                        chunk.get_or_write_constant(Value::String(v), self.line_number() as i32);
                     constant
                 }
                 _ => panic!("Got null token when evaluating literal"),

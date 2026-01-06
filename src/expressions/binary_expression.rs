@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::{
     compiler::{CodeGenerator, instructions::Instructions},
-    expressions::{Expression, Expressions, expect_ok},
+    expressions::{Expression, Expressions},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -49,18 +49,18 @@ impl<'a> BinaryExpression<'a> {
     }
 }
 
-impl<'a> Expression for BinaryExpression<'a> {
+impl<'a> Expression<'a> for BinaryExpression<'a> {
     fn line_number(&self) -> usize {
         self.line_number
     }
 }
 
-impl<'a> CodeGenerator for BinaryExpression<'a> {
+impl<'a> CodeGenerator<'a> for BinaryExpression<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut crate::compiler::chunk::Chunk,
+        chunk: &mut crate::compiler::chunk::Chunk<'a>,
         dst_register: Option<u8>,
-        mut reserved_registers: Vec<u8>,
+        reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
         let instruction = match self.op {
             BinaryOp::Plus => Instructions::Add,

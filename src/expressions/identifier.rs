@@ -3,14 +3,13 @@ use std::fmt::Display;
 use crate::{
     Token,
     compiler::{CodeGenerator, chunk::Chunk},
-    expressions::{Expression, Value, expect_ok},
-    scanner::{Keyword, TokenKind, TokenValue},
+    expressions::{Expression, Value},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IdentifierKind {
     GlobalScope,
-    LocalScope,
+    LocalScope { depth: usize, index: u8 },
 }
 
 #[derive(Debug)]
@@ -36,28 +35,30 @@ impl<'a> Identifier<'a> {
     }
 }
 
-impl<'a> Expression for Identifier<'a> {
+impl<'a> Expression<'a> for Identifier<'a> {
     fn line_number(&self) -> usize {
         self.line
     }
 }
 
-impl<'a> CodeGenerator for Identifier<'a> {
+impl<'a> CodeGenerator<'a> for Identifier<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut Chunk,
+        chunk: &mut Chunk<'a>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
+        let dst = self.dst_or_default(dst_register, &reserved_registers);
         match self.kind {
             IdentifierKind::GlobalScope => {
-                let ident_name = Value::String(self.token.to_string());
+                let ident_name = Value::String(self.token);
                 let constant = chunk.get_or_write_constant(ident_name, self.line as i32);
-                let dst = self.dst_or_default(dst_register, &reserved_registers);
 
                 chunk.write_get_global(constant, dst, self.line as i32);
             }
-            IdentifierKind::LocalScope => unimplemented!(),
+            IdentifierKind::LocalScope { depth, index } => {
+                chunk.write_get_local(dst, depth as u8, index, self.line as i32);
+            }
         }
 
         Ok(())

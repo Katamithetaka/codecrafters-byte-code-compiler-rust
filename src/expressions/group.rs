@@ -1,15 +1,13 @@
 use std::fmt::Display;
 
 use crate::{
-    Token,
     compiler::{CodeGenerator, chunk::Chunk},
-    expressions::{Expression, Expressions, Value, expect_ok},
-    scanner::{Keyword, TokenKind, TokenValue},
+    expressions::{Expression, Expressions},
 };
 
 #[derive(Debug)]
 pub struct Group<'a> {
-    expr: Box<Expressions<'a>>,
+    pub expr: Box<Expressions<'a>>,
 }
 
 impl<'a> Display for Group<'a> {
@@ -24,16 +22,16 @@ impl<'a> Group<'a> {
     }
 }
 
-impl<'a> Expression for Group<'a> {
+impl<'a> Expression<'a> for Group<'a> {
     fn line_number(&self) -> usize {
         self.expr.line_number()
     }
 }
 
-impl<'a> CodeGenerator for Group<'a> {
+impl<'a> CodeGenerator<'a> for Group<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut Chunk,
+        chunk: &mut Chunk<'a>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {

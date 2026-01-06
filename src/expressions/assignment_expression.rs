@@ -1,8 +1,11 @@
 use std::fmt::Display;
 
 use crate::{
-    compiler::{CodeGenerator, instructions::Instructions},
-    expressions::{Expression, Expressions, Value, expect_ok, identifier::Identifier},
+    compiler::CodeGenerator,
+    expressions::{
+        Expression, Expressions, Value,
+        identifier::{Identifier, IdentifierKind},
+    },
 };
 
 #[derive(Debug)]
@@ -28,32 +31,33 @@ impl<'a> AssignmentExpression<'a> {
     }
 }
 
-impl<'a> Expression for AssignmentExpression<'a> {
+impl<'a> Expression<'a> for AssignmentExpression<'a> {
     fn line_number(&self) -> usize {
         self.line_number
     }
 }
 
-impl<'a> CodeGenerator for AssignmentExpression<'a> {
+impl<'a> CodeGenerator<'a> for AssignmentExpression<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut crate::compiler::chunk::Chunk,
+        chunk: &mut crate::compiler::chunk::Chunk<'a>,
         dst_register: Option<u8>,
-        mut reserved_registers: Vec<u8>,
+        reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
-        let dist = match dst_register {
-            Some(a) => a,
-            None => reserved_registers.iter().max().copied().unwrap_or(0),
-        };
-
+        let dist = self.dst_or_default(dst_register, &reserved_registers);
         self.rhs
             .write_expression(chunk, Some(dist), reserved_registers)?;
+        match self.lhs.kind {
+            IdentifierKind::GlobalScope => {
+                let constant = chunk
+                    .get_or_write_constant(Value::String(self.lhs.token), self.lhs.line as i32);
 
-        let constant =
-            chunk.get_or_write_constant(Value::String(self.lhs.to_string()), self.lhs.line as i32);
-
-        chunk.write_set_global(constant, dist, self.lhs.line as i32);
-
+                chunk.write_set_global(constant, dist, self.lhs.line as i32);
+            }
+            IdentifierKind::LocalScope { depth, index } => {
+                chunk.write_set_local(dist, depth as u8, index, self.lhs.line as i32);
+            }
+        }
         Ok(())
     }
 }

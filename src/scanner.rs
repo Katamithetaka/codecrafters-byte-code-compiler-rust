@@ -1,7 +1,7 @@
 use std::{
     fmt::Display,
     iter::Peekable,
-    str::{CharIndices, Chars, FromStr},
+    str::{CharIndices, FromStr},
 };
 
 use strum::{Display, EnumString, IntoStaticStr};
@@ -136,7 +136,6 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn advance(&mut self) -> Option<char> {
-        
         let next = self.it.next();
         if let Some((offset, c)) = next {
             self.pos = offset + 1;
@@ -144,7 +143,7 @@ impl<'a> Lexer<'a> {
         }
         return None;
     }
-    
+
     pub fn peek(&mut self) -> Option<char> {
         let next = self.it.peek();
         if let Some((_, c)) = next {
@@ -248,8 +247,6 @@ impl<'a> Lexer<'a> {
         if !found_end {
             return Err(ScanningError::UnterminatedString(begin_line));
         }
-        
-        
 
         let lexeme = &self.input[begin_pos..self.pos];
         let value = TokenValue::String(&lexeme[1..=lexeme.len() - 2]); // remove quotes
@@ -263,7 +260,6 @@ impl<'a> Lexer<'a> {
 
     pub fn consume_identifier(&mut self) -> Result<Token<'a>, ScanningError> {
         let begin_pos = self.pos;
-        let mut found_end = false;
         self.advance();
         while let Some(v) = self.peek() {
             if !is_alpha(v) && !v.is_ascii_digit() {

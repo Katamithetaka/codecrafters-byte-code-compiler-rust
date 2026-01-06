@@ -3,13 +3,9 @@ use std::fmt::{Debug, Display};
 use crate::{
     compiler::{CodeGenerator, chunk::Chunk},
     expressions::{
-        assignment_expression::AssignmentExpression,
-        binary_expression::{BinaryExpression, BinaryOp},
-        equality_expression::EqualityExpression,
-        group::Group,
-        identifier::Identifier,
-        literal::Literal,
-        relation_expression::RelationalExpression,
+        assignment_expression::AssignmentExpression, binary_expression::BinaryExpression,
+        equality_expression::EqualityExpression, group::Group, identifier::Identifier,
+        literal::Literal, relation_expression::RelationalExpression,
         unary_expression::UnaryExpression,
     },
 };
@@ -24,14 +20,14 @@ pub mod relation_expression;
 pub mod unary_expression;
 
 #[derive(Clone, PartialEq, Debug)]
-pub enum Value {
+pub enum Value<S> {
     Number(f64),
-    String(String),
+    String(S),
     Null,
     Boolean(bool),
 }
 
-impl Display for Value {
+impl<S: Display> Display for Value<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Number(s) => write!(f, "{}", s),
@@ -42,7 +38,7 @@ impl Display for Value {
     }
 }
 
-impl<'a> Value {
+impl<S> Value<S> {
     pub fn is_truthy(&self) -> bool {
         match self {
             Value::Null => false,
@@ -50,76 +46,44 @@ impl<'a> Value {
             _ => true,
         }
     }
+}
 
-    pub fn binary_op_compatible(&self, other: &Self, op: BinaryOp) -> Option<EvaluateErrorDetails> {
-        match (self, other) {
-            (Value::Number(_), Value::Number(_)) => None,
-
-            (Value::String(_), Value::String(_)) if (op == BinaryOp::Plus) => None,
-            (Value::Number(_), _) | (_, Value::Number(_)) => {
-                Some(EvaluateErrorDetails::UnmatchedTypes)
-            }
-            (Value::String(_), _) | (_, Value::String(_)) if op == BinaryOp::Plus => {
-                Some(EvaluateErrorDetails::UnmatchedTypes)
-            }
-            _ => Some(EvaluateErrorDetails::BinaryNumberOp),
-        }
-    }
-
-    pub fn add(&self, right: &Self) -> Self {
-        match (self, right) {
-            (Value::Number(a), Value::Number(b)) => Value::Number(a + b),
-            (Value::String(a), Value::String(b)) => Value::String(format!("{a}{b}")),
-            _ => panic!("Tried to apply add on incompatible values!"),
-        }
-    }
-
-    pub fn sub(&self, right: &Self) -> Self {
-        match (self, right) {
-            (Value::Number(a), Value::Number(b)) => Value::Number(a - b),
-            _ => panic!("Tried to apply sub on incompatible values!"),
-        }
-    }
-
-    pub fn div(&self, right: &Self) -> Self {
-        match (self, right) {
-            (Value::Number(a), Value::Number(b)) => Value::Number(a / b),
-            _ => panic!("Tried to apply sub on incompatible values!"),
-        }
-    }
-
-    pub fn mult(&self, right: &Self) -> Self {
-        match (self, right) {
-            (Value::Number(a), Value::Number(b)) => Value::Number(a * b),
-            _ => panic!("Tried to apply sub on incompatible values!"),
+impl<'a> From<Value<&'a str>> for Value<String> {
+    fn from(value: Value<&'a str>) -> Self {
+        match value {
+            Value::Number(a) => Value::Number(a),
+            Value::String(s) => Value::String(s.to_string()),
+            Value::Null => Value::Null,
+            Value::Boolean(b) => Value::Boolean(b),
         }
     }
 }
 
-pub enum EvaluateOutcomeDetails {
-    Value(Option<Value>),
-    Return(Option<Value>),
-}
-
-impl Display for EvaluateOutcomeDetails {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<S> Value<S> {
+    pub fn as_number(&self) -> Result<f64, EvaluateErrorDetails> {
         match self {
-            EvaluateOutcomeDetails::Value(value) => {
-                write!(f, "{}", value.as_ref().unwrap_or(&Value::Null))
-            }
-            EvaluateOutcomeDetails::Return(value) => todo!(),
+            Value::Number(a) => Ok(*a),
+            _ => Err(EvaluateErrorDetails::ExpectedNumber),
         }
     }
-}
 
-pub struct EvaluateOutcome {
-    details: EvaluateOutcomeDetails,
-    line: usize,
-}
+    pub fn as_string(&self) -> Result<&S, EvaluateErrorDetails> {
+        match self {
+            Value::String(a) => Ok(a),
+            _ => Err(EvaluateErrorDetails::ExpectedString),
+        }
+    }
 
-impl Display for EvaluateOutcome {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.details)
+    pub fn as_ident(&self) -> Result<&S, EvaluateErrorDetails> {
+        return self
+            .as_string()
+            .or(Err(EvaluateErrorDetails::InvalidIdentifierType));
+    }
+
+    pub fn as_binary_number_op(&self) -> Result<f64, EvaluateErrorDetails> {
+        return self
+            .as_number()
+            .or(Err(EvaluateErrorDetails::BinaryNumberOp));
     }
 }
 
@@ -136,17 +100,27 @@ pub enum EvaluateErrorDetails {
     #[error("Operands must be numbers.")]
     BinaryNumberOp,
     #[error("Operand must be number.")]
-    UnaryNumberOp,
+    ExpectedNumber,
+    #[error("Operand must be string.")]
+    ExpectedString,
     #[error("Operands must be two numbers or two strings. ")]
     UnmatchedTypes,
     #[error("Undefined variable: {0}")]
     UndefinedVariable(String),
+    #[error("Expected identifier to be a string, but it wasn't")]
+    InvalidIdentifierType,
+    #[error("Tried to define a local variable in global scope")]
+    LocalInGlobal,
+    #[error("Tried to pop stack in global scope.")]
+    InvalidStackPop,
+    #[error("Stack overflow: Too many locals defined in local scopes")]
+    StackOverflow,
 }
 
 #[derive(thiserror::Error, Debug)]
 pub struct EvaluateError {
-    error: EvaluateErrorDetails,
-    line: usize,
+    pub error: EvaluateErrorDetails,
+    pub line: usize,
 }
 
 impl Display for EvaluateError {
@@ -155,50 +129,8 @@ impl Display for EvaluateError {
     }
 }
 
-pub type Result = std::result::Result<EvaluateOutcome, EvaluateError>;
-
-pub fn expect_ok(res: Result) -> std::result::Result<Option<Value>, EvaluateError> {
-    match res {
-        Ok(v) => match v {
-            EvaluateOutcome {
-                details: EvaluateOutcomeDetails::Value(v),
-                line,
-            } => Ok(v),
-            EvaluateOutcome {
-                details: EvaluateOutcomeDetails::Return(_),
-                line,
-            } => Err(EvaluateError {
-                error: EvaluateErrorDetails::UnexpectedReturn,
-                line,
-            }),
-        },
-        Err(v) => Err(v),
-    }
-}
-
-pub trait Expression: Display + Debug + CodeGenerator {
+pub trait Expression<'a>: Display + Debug + CodeGenerator<'a> {
     fn line_number(&self) -> usize;
-
-    fn ok(&self, v: Option<Value>) -> Result {
-        return Ok(EvaluateOutcome {
-            details: EvaluateOutcomeDetails::Value(v),
-            line: self.line_number(),
-        });
-    }
-
-    fn ret(&self, v: Option<Value>) -> Result {
-        return Ok(EvaluateOutcome {
-            details: EvaluateOutcomeDetails::Return(v),
-            line: self.line_number(),
-        });
-    }
-
-    fn err(&self, v: EvaluateErrorDetails) -> Result {
-        return Err(EvaluateError {
-            error: v,
-            line: self.line_number(),
-        });
-    }
 }
 
 #[derive(Debug, derive_more::From, derive_more::Display, derive_more::TryInto)]
@@ -221,7 +153,7 @@ pub enum Expressions<'a> {
     AssignmentExpression(AssignmentExpression<'a>),
 }
 
-impl Expression for Expressions<'_> {
+impl<'a> Expression<'a> for Expressions<'a> {
     fn line_number(&self) -> usize {
         match self {
             Expressions::BinaryExpression(binary_expression) => binary_expression.line_number(),
@@ -242,10 +174,10 @@ impl Expression for Expressions<'_> {
     }
 }
 
-impl CodeGenerator for Expressions<'_> {
+impl<'a> CodeGenerator<'a> for Expressions<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut Chunk,
+        chunk: &mut Chunk<'a>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {

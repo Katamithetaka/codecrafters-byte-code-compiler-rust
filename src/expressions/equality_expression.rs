@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::{
     compiler::{CodeGenerator, instructions::Instructions},
-    expressions::{Expression, Expressions, expect_ok},
+    expressions::{Expression, Expressions},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -45,27 +45,22 @@ impl<'a> EqualityExpression<'a> {
     }
 }
 
-impl<'a> Expression for EqualityExpression<'a> {
+impl<'a> Expression<'a> for EqualityExpression<'a> {
     fn line_number(&self) -> usize {
         self.line_number
     }
 }
 
-impl<'a> CodeGenerator for EqualityExpression<'a> {
+impl<'a> CodeGenerator<'a> for EqualityExpression<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut crate::compiler::chunk::Chunk,
+        chunk: &mut crate::compiler::chunk::Chunk<'a>,
         dst_register: Option<u8>,
-        mut reserved_registers: Vec<u8>,
+        reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
         let instruction = match self.op {
             EqualityOp::EqualEqual => Instructions::Eq,
             EqualityOp::BangEqual => Instructions::Neq,
-        };
-
-        let my_dst_register_0 = match dst_register {
-            Some(v) => v,
-            None => reserved_registers.iter().max().copied().unwrap_or(0) + 1, // this can be assumed to never happen
         };
 
         crate::compiler::macros::binary_op!(

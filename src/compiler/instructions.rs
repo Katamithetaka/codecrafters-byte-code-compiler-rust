@@ -22,6 +22,11 @@ pub enum Instructions {
     DefineGlobal = 16,
     GetGlobal = 17,
     SetGlobal = 18,
+    PushStack = 19,
+    PopStack = 20,
+    DefineLocal = 21,
+    GetLocal = 22,
+    SetLocal = 23,
 }
 
 pub fn simple_instruction(name: &str, offset: usize) -> usize {
@@ -37,18 +42,23 @@ pub fn print_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
 pub fn constant_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     let (constant, o) = Varint::read_bytes(chunk, offset + 1);
     eprint!("{name:15} c{constant} ");
-    print_value(&chunk.value_array[constant as usize]);
+    print_value(&chunk.constants[constant as usize]);
 
     return offset + o + 1;
 }
 
-pub fn load_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+pub fn constant_register_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     let (constant, o) = Varint::read_bytes(chunk, offset + 2);
 
     eprint!("{name:15} r{} c{} ", chunk.code[offset + 1], constant);
-    print_value(&chunk.value_array[constant as usize]);
+    print_value(&chunk.constants[constant as usize]);
 
     return offset + 2 + o;
+}
+
+pub fn single_register_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+    eprintln!("{name:15} r{}", chunk.code[offset + 1],);
+    return offset + 2;
 }
 
 pub fn unary_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
@@ -70,9 +80,22 @@ pub fn binary_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     return offset + 4;
 }
 
-pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
+pub fn stack_access(chunk: &Chunk, offset: usize) -> ((u8, u8), usize) {
+    return ((chunk.code[offset], chunk.code[offset + 1]), 2);
+}
+
+pub fn stack_access_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+    let register = chunk.code[offset + 1];
+    let ((depth, index), o) = stack_access(chunk, offset + 2);
+
+    eprintln!("{name:15} r{} s[{} + {}]", register, depth, index,);
+
+    return offset + o + 2;
+}
+
+pub fn disassemble_instruction(chunk: &Chunk, offset: usize, previous_offset: usize) -> usize {
     eprint!("{offset:04}");
-    if (offset > 0 && chunk.get_line(offset) == chunk.get_line(offset - 1)) {
+    if offset > 0 && chunk.get_line(offset) == chunk.get_line(previous_offset) {
         eprint!("   | ");
     } else {
         eprint!("{:4} ", chunk.get_line(offset));
@@ -82,7 +105,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
     match instruction {
         Some(Instructions::Return) => simple_instruction("OP_RETURN", offset),
         Some(Instructions::Constant) => constant_instruction("OP_CONSTANT", chunk, offset),
-        Some(Instructions::Load) => load_instruction("OP_LOAD", chunk, offset),
+        Some(Instructions::Load) => constant_register_instruction("OP_LOAD", chunk, offset),
         Some(Instructions::Negate) => unary_instruction("OP_NEGATE", chunk, offset),
         Some(Instructions::Bang) => unary_instruction("OP_BANG", chunk, offset),
         Some(Instructions::Add) => binary_instruction("OP_ADD", chunk, offset),
@@ -96,10 +119,16 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
         Some(Instructions::Gt) => binary_instruction("OP_GT", chunk, offset),
         Some(Instructions::GtEq) => binary_instruction("OP_GTEQ", chunk, offset),
         Some(Instructions::Print) => print_instruction("OP_PRINT", chunk, offset),
-        Some(Instructions::DefineGlobal) => load_instruction("OP_G_DEF", chunk, offset),
-        Some(Instructions::GetGlobal) => load_instruction("OP_G_GET", chunk, offset),
-        Some(Instructions::SetGlobal) => load_instruction("OP_G_SET", chunk, offset),
-
+        Some(Instructions::DefineGlobal) => {
+            constant_register_instruction("OP_G_DEF", chunk, offset)
+        }
+        Some(Instructions::GetGlobal) => constant_register_instruction("OP_G_GET", chunk, offset),
+        Some(Instructions::SetGlobal) => constant_register_instruction("OP_G_SET", chunk, offset),
+        Some(Instructions::PushStack) => simple_instruction("OP_S_PUSH", offset),
+        Some(Instructions::PopStack) => simple_instruction("OP_S_POP", offset),
+        Some(Instructions::DefineLocal) => single_register_instruction("OP_S_DEF", chunk, offset),
+        Some(Instructions::GetLocal) => stack_access_instruction("OP_S_GET", chunk, offset),
+        Some(Instructions::SetLocal) => stack_access_instruction("OP_S_SET", chunk, offset),
         None => offset + 1,
     }
 }
