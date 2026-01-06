@@ -101,6 +101,28 @@ macro_rules! cmp_op {
     };
 }
 
+macro_rules! bool_combine_op {
+    ($chunk: ident, $vm: ident, $op:tt) => {
+        {
+            let register_0 = $chunk.code[$vm.ip];
+            $vm.ip += 1;
+            let register_1 = $chunk.code[$vm.ip];
+            $vm.ip += 1;
+            let dst_register = $chunk.code[$vm.ip];
+            $vm.ip += 1;
+
+            let v_0 = &$vm.registers[register_0 as usize];
+            let v_1 = &$vm.registers[register_1 as usize];
+
+            $vm.registers[dst_register as usize] = Value::Boolean(v_0.is_truthy() $op v_1.is_truthy());
+            if DEBUG_TRACE_EXECUTION {
+                print_value(&$vm.registers[dst_register as usize]);
+            }
+
+        }
+    };
+}
+
 pub fn execute_instruction(
     vm: &mut Vm,
     chunk: &Chunk,
@@ -337,6 +359,8 @@ pub fn execute_instruction(
                 vm.ip = jmp_addr as usize;
             }
         }
+        Instructions::Or => bool_combine_op!(chunk, vm, ||),
+        Instructions::And => bool_combine_op!(chunk, vm, &&),
     }
 
     Ok(())
