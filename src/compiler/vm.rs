@@ -361,6 +361,12 @@ pub fn execute_instruction(
         }
         Instructions::Or => bool_combine_op!(chunk, vm, ||),
         Instructions::And => bool_combine_op!(chunk, vm, &&),
+        Instructions::Jump => {
+            let jmp_addr = u16::from_be_bytes([chunk.code[vm.ip], chunk.code[vm.ip + 1]]);
+            vm.ip += 2;
+
+            vm.ip = jmp_addr as usize;
+        }
     }
 
     Ok(())

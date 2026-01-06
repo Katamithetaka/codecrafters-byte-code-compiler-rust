@@ -30,6 +30,7 @@ pub enum Instructions {
     JumpIfFalse = 24,
     Or = 25,
     And = 26,
+    Jump = 27,
 }
 
 pub fn simple_instruction(name: &str, offset: usize) -> usize {
@@ -143,6 +144,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize, previous_offset: us
         Some(Instructions::JumpIfFalse) => jmp_instruction("OP_JMP_F", chunk, offset),
         Some(Instructions::Or) => binary_instruction("OP_OR", chunk, offset),
         Some(Instructions::And) => binary_instruction("OP_AND", chunk, offset),
+        Some(Instructions::Jump) => jmp_instruction("OP_JMP", chunk, offset),
         None => offset + 1,
     }
 }
