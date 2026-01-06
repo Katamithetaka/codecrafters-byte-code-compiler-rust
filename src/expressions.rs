@@ -5,8 +5,8 @@ use crate::{
     expressions::{
         assignment_expression::AssignmentExpression, binary_expression::BinaryExpression,
         equality_expression::EqualityExpression, group::Group, identifier::Identifier,
-        literal::Literal, relation_expression::RelationalExpression,
-        unary_expression::UnaryExpression,
+        literal::Literal, logical_expression::LogicalExpression,
+        relation_expression::RelationalExpression, unary_expression::UnaryExpression,
     },
 };
 
@@ -16,6 +16,7 @@ pub mod equality_expression;
 pub mod group;
 pub mod identifier;
 pub mod literal;
+pub mod logical_expression;
 pub mod relation_expression;
 pub mod unary_expression;
 
@@ -142,6 +143,8 @@ pub enum Expressions<'a> {
     #[from]
     EqualityExpression(EqualityExpression<'a>),
     #[from]
+    LogicalExpression(LogicalExpression<'a>),
+    #[from]
     Group(Group<'a>),
     #[from]
     Identifier(Identifier<'a>),
@@ -162,6 +165,7 @@ impl<'a> Expression<'a> for Expressions<'a> {
             Expressions::EqualityExpression(equality_expression) => {
                 equality_expression.line_number()
             }
+            Expressions::LogicalExpression(expression) => expression.line_number(),
             Expressions::Group(group) => group.line_number(),
             Expressions::Identifier(identifier) => identifier.line_number(),
             Expressions::Literal(literal) => literal.line_number(),
@@ -190,6 +194,10 @@ impl<'a> CodeGenerator<'a> for Expressions<'a> {
             Expressions::EqualityExpression(equality_expression) => {
                 equality_expression.write_expression(chunk, dst_register, reserved_registers)
             }
+            Expressions::LogicalExpression(expression) => {
+                expression.write_expression(chunk, dst_register, reserved_registers)
+            }
+
             Expressions::Group(group) => {
                 group.write_expression(chunk, dst_register, reserved_registers)
             }

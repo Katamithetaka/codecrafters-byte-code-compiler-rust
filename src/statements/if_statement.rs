@@ -1,5 +1,5 @@
 use crate::{
-    compiler::{CodeGenerator, instructions::Instructions},
+    compiler::CodeGenerator,
     expressions::{EvaluateError, EvaluateErrorDetails, Expressions, Value},
     statements::{Statement, Statements},
 };

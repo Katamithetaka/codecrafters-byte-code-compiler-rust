@@ -10,13 +10,14 @@ use crate::{
         equality_expression::EqualityExpression,
         group::Group,
         identifier::{Identifier, IdentifierKind},
+        logical_expression::LogicalExpression,
         relation_expression::RelationalExpression,
         unary_expression::UnaryExpression,
     },
     statements::{
         Statements, block_statement::BlockStatement, declare_statement::DeclareStatement,
         expression_statement::ExprStatement, if_statement::IfStatement,
-        print_statement::PrintStatement,
+        print_statement::PrintStatement, while_statements::WhileStatement,
     },
 };
 
@@ -288,6 +289,18 @@ impl Resolver {
         .into())
     }
 
+    pub fn resolve_logical<'a>(
+        &mut self,
+        binary_expression: LogicalExpression<'a>,
+    ) -> Result<Expressions<'a>, ParserError> {
+        Ok(LogicalExpression::new(
+            binary_expression.op,
+            Box::new(self.resolve_expr(*binary_expression.lhs)?),
+            Box::new(self.resolve_expr(*binary_expression.rhs)?),
+        )
+        .into())
+    }
+
     pub fn resolve_unary<'a>(
         &mut self,
         unary_expression: UnaryExpression<'a>,
@@ -334,6 +347,7 @@ impl Resolver {
             Expressions::RelationalExpression(expr) => Ok(self.resolve_relation(expr)?.into()),
             Expressions::EqualityExpression(expr) => Ok(self.resolve_equality(expr)?.into()),
             Expressions::UnaryExpression(expr) => Ok(self.resolve_unary(expr)?.into()),
+            Expressions::LogicalExpression(expr) => Ok(self.resolve_logical(expr)?.into()),
             Expressions::Literal(_) => Ok(expr),
         }
     }
@@ -411,6 +425,16 @@ impl Resolver {
         return Ok(IfStatement::new(new_statements).into());
     }
 
+    pub fn visit_while<'a>(
+        &mut self,
+        statement: WhileStatement<'a>,
+    ) -> Result<Statements<'a>, ParserError> {
+        let expr = self.resolve_expr(statement.expression)?;
+        let statement = self.resolve_statement(*statement.statement)?;
+
+        return Ok(WhileStatement::new(expr, Box::new(statement)).into());
+    }
+
     pub fn resolve_statement<'a>(
         &mut self,
         statement: Statements<'a>,
@@ -423,6 +447,7 @@ impl Resolver {
             Statements::ExprStatement(expr_statement) => self.visit_expr(expr_statement),
             Statements::PrintStatement(print_statement) => self.visit_print(print_statement),
             Statements::IfStatement(if_statement) => self.visit_if(if_statement),
+            Statements::WhileStatement(while_statement) => self.visit_while(while_statement),
         }
     }
 

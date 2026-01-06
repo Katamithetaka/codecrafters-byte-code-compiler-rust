@@ -105,6 +105,13 @@ impl<'a> Chunk<'a> {
         return_val
     }
 
+    pub fn write_goto(&mut self, position: u16, line: i32) {
+        self.write_instruction(Instructions::Jump, line);
+        let values: [u8; 2] = position.to_be_bytes(); // IT IS NOW DECIDED THAT WE USE BIG ENDIAN LMAO
+        self.write(values[0], line);
+        self.write(values[1], line);
+    }
+
     pub fn update_jump(&mut self, index: usize) -> Result<(), TryFromIntError> {
         let current_offset: u16 = self.code.len().try_into()?;
         let values: [u8; 2] = current_offset.to_be_bytes(); // IT IS NOW DECIDED THAT WE USE BIG ENDIAN LMAO

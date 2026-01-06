@@ -9,6 +9,7 @@ use crate::{
         equality_expression::{EqualityExpression, EqualityOp},
         group::Group,
         identifier::Identifier,
+        logical_expression::{LogicalExpression, LogicalOp},
         relation_expression::{RelationalExpression, RelationalOp},
         unary_expression::{UnaryExpression, UnaryOp},
     },
@@ -16,7 +17,7 @@ use crate::{
     statements::{
         Statements, block_statement::BlockStatement, declare_statement::DeclareStatement,
         expression_statement::ExprStatement, if_statement::IfStatement,
-        print_statement::PrintStatement,
+        print_statement::PrintStatement, while_statements::WhileStatement,
     },
 };
 
@@ -122,8 +123,34 @@ impl<'a> AstParser<'a> {
         self.assignment()
     }
 
+    pub fn or(&mut self) -> Result<Expressions<'a>, ParserError> {
+        let mut expr = self.and()?;
+
+        while self.token_kind() == TokenKind::Keyword(Keyword::Or) {
+            self.advance();
+
+            let right = self.and()?;
+            expr = LogicalExpression::new(LogicalOp::Or, Box::new(expr), Box::new(right)).into();
+        }
+
+        Ok(expr)
+    }
+
+    pub fn and(&mut self) -> Result<Expressions<'a>, ParserError> {
+        let mut expr = self.equality()?;
+
+        while self.token_kind() == TokenKind::Keyword(Keyword::And) {
+            self.advance();
+
+            let right = self.equality()?;
+            expr = LogicalExpression::new(LogicalOp::And, Box::new(expr), Box::new(right)).into();
+        }
+
+        Ok(expr)
+    }
+
     pub fn assignment(&mut self) -> Result<Expressions<'a>, ParserError> {
-        let expr = self.equality()?;
+        let expr = self.or()?;
         if self.token_kind() == TokenKind::Equal {
             self.advance();
             let right = self.assignment()?;
@@ -349,6 +376,13 @@ impl<'a> AstParser<'a> {
         return Ok(IfStatement::new(statements));
     }
 
+    pub fn while_statement(&mut self) -> Result<Statements<'a>, ParserError> {
+        self.consume(TokenKind::LeftParen)?;
+        let expression = self.group()?;
+        let statement = self.statement()?;
+        return Ok(WhileStatement::new(expression, Box::new(statement)).into());
+    }
+
     pub fn statement(&mut self) -> Result<Statements<'a>, ParserError> {
         match self.token_kind() {
             TokenKind::Keyword(Keyword::Print) => {
@@ -358,6 +392,10 @@ impl<'a> AstParser<'a> {
             TokenKind::Keyword(Keyword::If) => {
                 self.advance();
                 Ok(self.if_statement()?.into())
+            }
+            TokenKind::Keyword(Keyword::While) => {
+                self.advance();
+                Ok(self.while_statement()?.into())
             }
             TokenKind::LeftBrace => {
                 self.advance();
