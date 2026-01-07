@@ -3,9 +3,7 @@ use std::fmt::Debug;
 use crate::{
     compiler::CodeGenerator,
     statements::{
-        block_statement::BlockStatement, declare_statement::DeclareStatement,
-        expression_statement::ExprStatement, if_statement::IfStatement,
-        print_statement::PrintStatement, while_statements::WhileStatement,
+        block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, if_statement::IfStatement, print_statement::PrintStatement, while_statements::WhileStatement
     },
 };
 
@@ -15,6 +13,7 @@ pub mod expression_statement;
 pub mod if_statement;
 pub mod print_statement;
 pub mod while_statements;
+pub mod for_statement;
 
 pub trait Statement<'a>: Debug + CodeGenerator<'a> {}
 
@@ -26,6 +25,8 @@ pub enum Statements<'a> {
     PrintStatement(PrintStatement<'a>),
     IfStatement(IfStatement<'a>),
     WhileStatement(WhileStatement<'a>),
+    ForStatement(ForStatement<'a>),
+    
 }
 
 impl<'a> Statement<'a> for Statements<'a> {}
@@ -54,6 +55,9 @@ impl<'a> CodeGenerator<'a> for Statements<'a> {
                 statement.write_expression(chunk, dst_register, reserved_registers)
             }
             Statements::WhileStatement(statement) => {
+                statement.write_expression(chunk, dst_register, reserved_registers)
+            }
+            Statements::ForStatement(statement) => {
                 statement.write_expression(chunk, dst_register, reserved_registers)
             }
         }

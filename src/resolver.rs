@@ -15,9 +15,7 @@ use crate::{
         unary_expression::UnaryExpression,
     },
     statements::{
-        Statements, block_statement::BlockStatement, declare_statement::DeclareStatement,
-        expression_statement::ExprStatement, if_statement::IfStatement,
-        print_statement::PrintStatement, while_statements::WhileStatement,
+        Statements, block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::{ForStatement}, if_statement::IfStatement, print_statement::PrintStatement, while_statements::WhileStatement
     },
 };
 
@@ -434,6 +432,22 @@ impl Resolver {
 
         return Ok(WhileStatement::new(expr, Box::new(statement)).into());
     }
+    
+    pub fn visit_for<'a>(
+        &mut self,
+        statement: ForStatement<'a>,
+    ) -> Result<Statements<'a>, ParserError> {
+        self.push_local_scope();
+        
+        let dec = statement.variable_declare.map(|e| self.resolve_statement(*e).map(Box::new)).transpose()?;
+        let test = statement.test.map(|e| self.resolve_expr(e)).transpose()?;
+        let inc = statement.inc.map(|e| self.resolve_expr(e)).transpose()?;
+        
+        let exec = self.resolve_statement(*statement.statement).map(Box::new)?;
+        self.pop_scope();
+
+        return Ok(ForStatement::new(dec, test, inc, exec, statement.begin_line, statement.end_line).into());
+    }
 
     pub fn resolve_statement<'a>(
         &mut self,
@@ -448,6 +462,8 @@ impl Resolver {
             Statements::PrintStatement(print_statement) => self.visit_print(print_statement),
             Statements::IfStatement(if_statement) => self.visit_if(if_statement),
             Statements::WhileStatement(while_statement) => self.visit_while(while_statement),
+            Statements::ForStatement(for_statement) => self.visit_for(for_statement),
+            
         }
     }
 

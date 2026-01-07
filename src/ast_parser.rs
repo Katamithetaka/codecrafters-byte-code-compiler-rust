@@ -3,21 +3,11 @@ use std::{fmt::Display, iter::Peekable};
 use crate::{
     Token,
     expressions::{
-        Expressions,
-        assignment_expression::AssignmentExpression,
-        binary_expression::{BinaryExpression, BinaryOp},
-        equality_expression::{EqualityExpression, EqualityOp},
-        group::Group,
-        identifier::Identifier,
-        logical_expression::{LogicalExpression, LogicalOp},
-        relation_expression::{RelationalExpression, RelationalOp},
-        unary_expression::{UnaryExpression, UnaryOp},
+        Expressions, assignment_expression::AssignmentExpression, binary_expression::{BinaryExpression, BinaryOp}, equality_expression::{EqualityExpression, EqualityOp}, group::Group, identifier::Identifier, logical_expression::{LogicalExpression, LogicalOp}, relation_expression::{RelationalExpression, RelationalOp}, unary_expression::{UnaryExpression, UnaryOp}
     },
     scanner::{Keyword, TokenKind},
     statements::{
-        Statements, block_statement::BlockStatement, declare_statement::DeclareStatement,
-        expression_statement::ExprStatement, if_statement::IfStatement,
-        print_statement::PrintStatement, while_statements::WhileStatement,
+        Statements, block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, if_statement::IfStatement, print_statement::PrintStatement, while_statements::WhileStatement
     },
 };
 
@@ -382,6 +372,52 @@ impl<'a> AstParser<'a> {
         let statement = self.statement()?;
         return Ok(WhileStatement::new(expression, Box::new(statement)).into());
     }
+    
+    pub fn for_statement(&mut self) -> Result<Statements<'a>, ParserError> {
+        self.consume(TokenKind::LeftParen)?;
+        let begin_line = self.line_number();
+        let declaration: Option<Box<Statements<'a>>> =
+        if self.token_kind() != TokenKind::Semicolon {
+            if self.token_kind() == TokenKind::Keyword(Keyword::Var) {
+                self.advance();
+                Some(Box::new(self.variable_declaration()?.into()))
+            }
+            else {
+               Some(Box::new(self.expr_statement()?.into()))
+            }
+        }
+        else {
+            self.advance();
+            None
+        };
+        eprintln!("Got declaration");
+        let test: Option<Expressions<'a>> = 
+            if self.token_kind() != TokenKind::Semicolon {
+                Some(self.expression()?.into())
+            }
+            else {
+                None
+            };
+        self.consume(TokenKind::Semicolon)?;
+        eprintln!("Got declaration");
+        
+        let inc: Option<Expressions<'a>> = 
+            if self.token_kind() != TokenKind::RightParen {
+                Some(self.expression()?.into())
+            }
+            else {
+                None
+            };
+        
+        self.consume(TokenKind::RightParen)?;      
+        eprintln!("Got declaration");
+        
+        let statement = Box::new(self.statement()?);
+        let end_line = self.line_number();
+        
+        return Ok(ForStatement::new(declaration, test, inc, statement, begin_line, end_line).into())
+    }
+
 
     pub fn statement(&mut self) -> Result<Statements<'a>, ParserError> {
         match self.token_kind() {
@@ -396,6 +432,10 @@ impl<'a> AstParser<'a> {
             TokenKind::Keyword(Keyword::While) => {
                 self.advance();
                 Ok(self.while_statement()?.into())
+            }
+            TokenKind::Keyword(Keyword::For) => {
+                self.advance();
+                Ok(self.for_statement()?.into())
             }
             TokenKind::LeftBrace => {
                 self.advance();
