@@ -34,7 +34,7 @@ impl<'a> Chunk<'a> {
         }
     }
 
-    pub fn get_constant(&mut self, value: &Value<&str>) -> Option<Varint> {
+    pub fn get_constant(&mut self, value: &Value<&'a str>) -> Option<Varint> {
         self.constants.iter().position(|e| e == value).map(|v| {
             return Varint(v as u32);
         })
@@ -136,18 +136,16 @@ impl<'a> Chunk<'a> {
         self.write(value_register as u8, line);
     }
 
-    pub fn write_get_local(&mut self, output_register: u8, depth: u8, index: u8, line: i32) {
+    pub fn write_get_local(&mut self, output_register: u8, slot: u8, line: i32) {
         self.write_instruction(Instructions::GetLocal, line);
         self.write(output_register as u8, line);
-        self.write(depth as u8, line);
-        self.write(index as u8, line);
+        self.write(slot as u8, line);
     }
 
-    pub fn write_set_local(&mut self, input_register: u8, depth: u8, index: u8, line: i32) {
+    pub fn write_set_local(&mut self, input_register: u8, slot: u8, line: i32) {
         self.write_instruction(Instructions::SetLocal, line);
         self.write(input_register as u8, line);
-        self.write(depth as u8, line);
-        self.write(index as u8, line);
+        self.write(slot as u8, line);
     }
 
     pub fn write_set_global(&mut self, ident: Varint, value_register: u8, line: i32) -> usize {
@@ -162,6 +160,10 @@ impl<'a> Chunk<'a> {
         ident.write_bytes(self, line)
     }
 
+    pub fn write_function_return(&mut self, line: i32) {
+        self.write_instruction(Instructions::FunctionReturn, line);
+    }
+
     pub fn write_stack_push(&mut self, line: i32) {
         self.write_instruction(Instructions::PushStack, line);
     }
@@ -169,6 +171,19 @@ impl<'a> Chunk<'a> {
     pub fn write_stack_pop(&mut self, line: i32) {
         self.write_instruction(Instructions::PopStack, line);
     }
+    
+    pub fn write_call_stack_push(&mut self, register_base: u8, line: i32) {
+        self.write_instruction(Instructions::PushCallStack, line);
+        self.write(register_base, line);
+    }
+    
+    pub fn write_fn_call(&mut self, fn_register: u8, num_args: u8, line: i32) {
+        self.write_instruction(Instructions::FunctionCall, line);
+        self.write(fn_register, line);
+        self.write(num_args, line);
+
+    }
+    
 
     pub fn write_unary(
         &mut self,

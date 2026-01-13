@@ -3,6 +3,7 @@ use interpreter::compiler::CodeGenerator;
 use interpreter::compiler::chunk::Chunk;
 use interpreter::compiler::instructions::Instructions;
 use interpreter::compiler::vm::interpret;
+use interpreter::global_functions::register_global_functions;
 use interpreter::resolver::Resolver;
 use interpreter::*;
 use std::env;
@@ -170,7 +171,7 @@ fn main() {
             };
 
             let mut chunk = Chunk::new();
-
+            register_global_functions(&mut chunk);
             for mut expr in v {
                 match expr.write_expression(&mut chunk, None, vec![]) {
                     Ok(_) => {}
@@ -197,3 +198,4 @@ fn main() {
         }
     }
 }
+

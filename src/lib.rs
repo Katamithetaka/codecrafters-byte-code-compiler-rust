@@ -4,6 +4,7 @@ mod expressions;
 pub mod resolver;
 mod scanner;
 pub mod statements;
+pub mod global_functions;
 
 pub use ast_parser::prelude::*;
 pub use scanner::prelude::*;

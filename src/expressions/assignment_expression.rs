@@ -54,8 +54,12 @@ impl<'a> CodeGenerator<'a> for AssignmentExpression<'a> {
 
                 chunk.write_set_global(constant, dist, self.lhs.line as i32);
             }
-            IdentifierKind::LocalScope { depth, index } => {
-                chunk.write_set_local(dist, depth as u8, index, self.lhs.line as i32);
+            IdentifierKind::LocalScope { slot} => {
+                chunk.write_set_local(dist, slot, self.lhs.line as i32);
+            }
+            IdentifierKind::UpperScope { .. } => {
+                todo!();
+                // chunk.write_set_local(dist, slot, self.lhs.line as i32);
             }
         }
         Ok(())

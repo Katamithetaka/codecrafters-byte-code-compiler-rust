@@ -29,6 +29,9 @@ pub enum Instructions {
     SetLocal = 23,
     JumpIfFalse = 24,
     Jump = 25,
+    FunctionCall = 26,
+    FunctionReturn = 27,
+    PushCallStack = 28
 }
 
 pub fn simple_instruction(name: &str, offset: usize) -> usize {
@@ -82,26 +85,43 @@ pub fn binary_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     return offset + 4;
 }
 
-pub fn stack_access(chunk: &Chunk, offset: usize) -> ((u8, u8), usize) {
-    return ((chunk.code[offset], chunk.code[offset + 1]), 2);
+pub fn stack_access(chunk: &Chunk, offset: usize) -> (u8, usize) {
+    return (chunk.code[offset], 1);
 }
 
 pub fn stack_access_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     let register = chunk.code[offset + 1];
-    let ((depth, index), o) = stack_access(chunk, offset + 2);
+    let (index, o) = stack_access(chunk, offset + 2);
 
-    eprintln!("{name:15} r{} s[{} + {}]", register, depth, index,);
+    eprintln!("{name:15} r{} s[{}]", register, index,);
 
     return offset + o + 2;
 }
 
-pub fn jmp_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+pub fn jmp_if_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     let register = chunk.code[offset + 1];
     let jmp_addr = u16::from_be_bytes([chunk.code[offset + 2], chunk.code[offset + 3]]);
     eprintln!("{name:15} r{} addr[{}]", register, jmp_addr);
 
     return offset + 4;
 }
+
+pub fn jmp_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+    let jmp_addr = u16::from_be_bytes([chunk.code[offset + 1], chunk.code[offset + 2]]);
+    eprintln!("{name:15} addr[{}]", jmp_addr);
+
+    return offset + 4;
+}
+
+
+pub fn fn_call_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+    let fn_register = chunk.code[offset + 1];
+    let num_args = chunk.code[offset + 2];
+    eprintln!("{name:15} r{fn_register} args: {num_args}");
+
+    return offset + 3;
+}
+
 
 pub fn disassemble_instruction(chunk: &Chunk, offset: usize, previous_offset: usize) -> usize {
     eprint!("{offset:04}");
@@ -139,8 +159,12 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize, previous_offset: us
         Some(Instructions::DefineLocal) => single_register_instruction("OP_S_DEF", chunk, offset),
         Some(Instructions::GetLocal) => stack_access_instruction("OP_S_GET", chunk, offset),
         Some(Instructions::SetLocal) => stack_access_instruction("OP_S_SET", chunk, offset),
-        Some(Instructions::JumpIfFalse) => jmp_instruction("OP_JMP_F", chunk, offset),
+        Some(Instructions::JumpIfFalse) => jmp_if_instruction("OP_JMP_F", chunk, offset),
         Some(Instructions::Jump) => jmp_instruction("OP_JMP", chunk, offset),
+        Some(Instructions::FunctionCall) => fn_call_instruction("OP_FN_CALL", chunk, offset),
+        Some(Instructions::FunctionReturn) => simple_instruction("OP_FN_RT", offset),
+        Some(Instructions::PushCallStack) => single_register_instruction("OP_FN_PUSH", chunk, offset),
+
         None => offset + 1,
     }
 }

@@ -9,7 +9,9 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IdentifierKind {
     GlobalScope,
-    LocalScope { depth: usize, index: u8 },
+    LocalScope { slot: u8 },
+    UpperScope { slot: u8 },
+    
 }
 
 #[derive(Debug)]
@@ -56,9 +58,10 @@ impl<'a> CodeGenerator<'a> for Identifier<'a> {
 
                 chunk.write_get_global(constant, dst, self.line as i32);
             }
-            IdentifierKind::LocalScope { depth, index } => {
-                chunk.write_get_local(dst, depth as u8, index, self.line as i32);
+            IdentifierKind::LocalScope { slot } => {
+                chunk.write_get_local(dst, slot, self.line as i32);
             }
+            IdentifierKind::UpperScope { .. } => todo!(),
         }
 
         Ok(())

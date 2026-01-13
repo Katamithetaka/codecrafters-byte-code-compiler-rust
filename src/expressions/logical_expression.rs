@@ -66,10 +66,10 @@ impl<'a> CodeGenerator<'a> for LogicalExpression<'a> {
                 chunk.write_unary(
                     Instructions::Bang,
                     dst,
-                    dst + 1,
+                    self.next_dst(dst, 1, &reserved_registers),
                     self.lhs.line_number() as i32,
                 );
-                dst + 1
+                self.next_dst(dst, 1, &reserved_registers)
             }
             LogicalOp::And => {
                 self.lhs

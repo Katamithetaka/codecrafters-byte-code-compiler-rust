@@ -1,26 +1,23 @@
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap},
+};
 
 use crate::{
     ParserError,
     ast_parser::ParserErrorDetails,
     expressions::{
-        Expressions,
-        assignment_expression::AssignmentExpression,
-        binary_expression::BinaryExpression,
-        equality_expression::EqualityExpression,
-        group::Group,
-        identifier::{Identifier, IdentifierKind},
-        logical_expression::LogicalExpression,
-        relation_expression::RelationalExpression,
-        unary_expression::UnaryExpression,
+        Expressions, assignment_expression::AssignmentExpression, binary_expression::BinaryExpression, call_expression::CallExpression, equality_expression::EqualityExpression, group::Group, identifier::{Identifier, IdentifierKind}, logical_expression::LogicalExpression, relation_expression::RelationalExpression, unary_expression::UnaryExpression
     },
     statements::{
-        Statements, block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::{ForStatement}, if_statement::IfStatement, print_statement::PrintStatement, while_statements::WhileStatement
+        Statements, block_statement::BlockStatement, declare_statement::DeclareStatement,
+        expression_statement::ExprStatement, for_statement::ForStatement,
+        function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement,
+        print_statement::PrintStatement, while_statements::WhileStatement,
     },
 };
 
 pub struct LocalScope {
-    idents: HashMap<String, (u8, u8)>,
+    idents: HashMap<String, u8>,
 }
 
 impl LocalScope {
@@ -33,7 +30,6 @@ impl LocalScope {
     pub fn declare_identifier(
         &mut self,
         name: &mut Identifier,
-        depth: u8,
         stack_index: u8,
     ) -> Result<(), ParserError> {
         if self.idents.contains_key(name.token) {
@@ -42,13 +38,9 @@ impl LocalScope {
                 line: name.line,
             });
         }
-        name.kind = IdentifierKind::LocalScope {
-            depth: depth as usize,
-            index: stack_index,
-        };
+        name.kind = IdentifierKind::LocalScope { slot: stack_index };
 
-        self.idents
-            .insert(name.token.to_string(), (depth, stack_index));
+        self.idents.insert(name.token.to_string(), stack_index);
 
         Ok(())
     }
@@ -67,6 +59,11 @@ pub enum ResolverScope {
     ClassBody(Box<ResolverScope>, LocalScope),
     DerivedClassBody(Box<ResolverScope>, LocalScope),
     MethodBody(Box<ResolverScope>, LocalScope),
+}
+
+pub enum LocalIdentifierKind {
+    LocalScope,
+    UpperScope,
 }
 
 impl ResolverScope {
@@ -154,11 +151,37 @@ impl ResolverScope {
             };
     }
 
-    pub fn get_local_identifier(&self, name: &str) -> Option<(u8, u8)> {
+    pub fn get_local_identifier_kind(&self, name: &str) -> Option<LocalIdentifierKind> {
+        match self.get_local_scope() {
+            Some(scope) => scope
+                .idents
+                .contains_key(name)
+                .then_some(LocalIdentifierKind::LocalScope)
+                .or_else(|| {
+                    self.get_parent_scope()
+                        .map(|p| p.get_local_identifier_kind(name))
+                        .flatten()
+                        .map(|_| LocalIdentifierKind::UpperScope)
+                }),
+            None => None,
+        }
+    }
+
+    pub fn get_slot_offset(&self) -> u8 {
+        match self.get_parent_scope() {
+            Some(parent) => match parent.get_local_scope() {
+                Some(s) => s.idents.len() as u8 + parent.get_slot_offset(),
+                None => 0,
+            },
+            None => 0,
+        }
+    }
+
+    pub fn get_local_identifier_slot(&self, name: &str) -> Option<u8> {
         match self.get_local_scope() {
             Some(scope) => scope.idents.get(name).copied().or_else(|| {
                 self.get_parent_scope()
-                    .map(|parent| parent.get_local_identifier(name))
+                    .map(|p| p.get_local_identifier_slot(name))
                     .flatten()
             }),
             None => None,
@@ -321,16 +344,41 @@ impl Resolver {
         &mut self,
         mut ident: Identifier<'a>,
     ) -> Result<Identifier<'a>, ParserError> {
-        match self.scope.get_local_identifier(ident.token) {
-            Some(index) => {
+        match self.scope.get_local_identifier_kind(ident.token) {
+            Some(LocalIdentifierKind::UpperScope) => {
+                if matches!(
+                    self.scope,
+                    ResolverScope::FunctionBody(_, _) | ResolverScope::MethodBody(_, _)
+                ) {
+                    ident.kind = IdentifierKind::UpperScope {
+                        slot: self.scope.get_local_identifier_slot(ident.token).unwrap(),
+                    };
+                    return Ok(ident.into());
+                } else {
+                    ident.kind = IdentifierKind::LocalScope {
+                        slot: self.scope.get_local_identifier_slot(ident.token).unwrap(),
+                    };
+                    return Ok(ident.into());
+                }
+            }
+            Some(LocalIdentifierKind::LocalScope) => {
                 ident.kind = IdentifierKind::LocalScope {
-                    depth: index.0 as usize,
-                    index: index.1,
+                    slot: self.scope.get_local_identifier_slot(ident.token).unwrap(),
                 };
-                Ok(ident.into())
+                return Ok(ident.into());
             }
             None => Ok(ident.into()),
         }
+    }
+    
+    pub fn resolve_call<'a>(&mut self, mut expr: CallExpression<'a>) -> Result<Expressions<'a>, ParserError>  {
+        expr.lhs = Box::new(self.resolve_expr(*expr.lhs)?);
+        let  v = std::mem::replace(&mut expr.arguments, vec![]);
+        for i in v.into_iter() {
+            expr.arguments.push(self.resolve_expr(i)?);
+        };
+        
+        Ok(expr.into())
     }
 
     pub fn resolve_expr<'a>(
@@ -346,6 +394,7 @@ impl Resolver {
             Expressions::EqualityExpression(expr) => Ok(self.resolve_equality(expr)?.into()),
             Expressions::UnaryExpression(expr) => Ok(self.resolve_unary(expr)?.into()),
             Expressions::LogicalExpression(expr) => Ok(self.resolve_logical(expr)?.into()),
+            Expressions::CallExpressionn(expr) => Ok(self.resolve_call(expr)?.into()),
             Expressions::Literal(_) => Ok(expr),
         }
     }
@@ -386,11 +435,7 @@ impl Resolver {
     ) -> Result<Statements<'a>, ParserError> {
         match self.scope.get_local_scope_mut() {
             Some(v) => {
-                v.declare_identifier(
-                    &mut declare.ident,
-                    self.stack.len() as u8,
-                    self.stack_index - self.stack.last().unwrap(),
-                )?;
+                v.declare_identifier(&mut declare.ident, self.stack_index as u8)?;
                 self.stack_index += 1;
             }
             None => {}
@@ -432,21 +477,66 @@ impl Resolver {
 
         return Ok(WhileStatement::new(expr, Box::new(statement)).into());
     }
-    
+
     pub fn visit_for<'a>(
         &mut self,
         statement: ForStatement<'a>,
     ) -> Result<Statements<'a>, ParserError> {
         self.push_local_scope();
-        
-        let dec = statement.variable_declare.map(|e| self.resolve_statement(*e).map(Box::new)).transpose()?;
+
+        let dec = statement
+            .variable_declare
+            .map(|e| self.resolve_statement(*e).map(Box::new))
+            .transpose()?;
         let test = statement.test.map(|e| self.resolve_expr(e)).transpose()?;
         let inc = statement.inc.map(|e| self.resolve_expr(e)).transpose()?;
-        
+
         let exec = self.resolve_statement(*statement.statement).map(Box::new)?;
         self.pop_scope();
 
-        return Ok(ForStatement::new(dec, test, inc, exec, statement.begin_line, statement.end_line).into());
+        return Ok(ForStatement::new(
+            dec,
+            test,
+            inc,
+            exec,
+            statement.begin_line,
+            statement.end_line,
+        )
+        .into());
+    }
+
+    pub fn visit_function_declare<'a>(
+        &mut self,
+        mut statement: FunctionDeclareStatement<'a>,
+    ) -> Result<Statements<'a>, ParserError> {
+        match self.scope.get_local_scope_mut() {
+            Some(v) => {
+                v.declare_identifier(&mut statement.ident, self.stack_index)?;
+                self.stack_index += 1;
+            }
+            None => {}
+        };
+        self.push_local_scope();
+        match self.scope.get_local_scope_mut() {
+            Some(v) => {
+                statement
+                    .args
+                    .iter_mut()
+                    .map(|mut arg| {
+                        let result = v.declare_identifier(&mut arg, self.stack_index);
+                        self.stack_index += 1;
+                        result
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+            }
+            None => unreachable!(),
+        };
+
+        let statements = std::mem::replace(&mut statement.statements, vec![]);
+        statement.statements = self.resolve_statements(statements)?;
+        self.pop_scope();
+
+        return Ok(statement.into());
     }
 
     pub fn resolve_statement<'a>(
@@ -463,7 +553,9 @@ impl Resolver {
             Statements::IfStatement(if_statement) => self.visit_if(if_statement),
             Statements::WhileStatement(while_statement) => self.visit_while(while_statement),
             Statements::ForStatement(for_statement) => self.visit_for(for_statement),
-            
+            Statements::FunctionDeclareStatement(function_declare_statement) => {
+                self.visit_function_declare(function_declare_statement)
+            }
         }
     }
 

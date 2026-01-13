@@ -19,6 +19,10 @@ pub trait CodeGenerator<'a> {
     fn dst_or_default(&self, dst: Option<u8>, reserved_registers: &[u8]) -> u8 {
         dst.unwrap_or(reserved_registers.iter().max().copied().unwrap_or(0) + 1)
     }
+    
+    fn next_dst(&self, dst: u8, offset: u8, reserved_registers: &[u8]) -> u8 {
+        reserved_registers.iter().max().copied().unwrap_or(0) + dst + offset
+    }
 }
 
 pub mod macros {

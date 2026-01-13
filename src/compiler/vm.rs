@@ -11,14 +11,41 @@ use crate::{
 };
 
 const STACK_MAX_SIZE: u8 = 255;
+const REGISTER_MAX_SIZE: usize = 256;
+const FN_CALL_OFFSET: u8 = 4;
+type Registers = [Value<String>; REGISTER_MAX_SIZE];
+
+#[derive(Debug)]
+pub struct CallFrame {
+    pub return_ip: usize,
+    pub register_base: u8,
+    pub stack_index: u8
+}
+
+
 
 pub struct Vm {
     pub ip: usize,
-    pub registers: [Value<String>; 256],
+    pub registers: Registers,
     pub global_variables: HashMap<String, Value<String>>,
     pub stack_states: Vec<u8>,
     pub stack: [Value<String>; STACK_MAX_SIZE as usize],
     pub stack_index: u16,
+    pub call_stack: Vec<CallFrame>
+}
+
+impl Vm {
+    pub fn get_register(&self, register: u8) -> u8 {
+        self.call_stack.last().map(|c| c.register_base).unwrap_or(0) + register
+    }
+    
+    pub fn get_stack_index(&self, stack_index: u8) -> u8 {
+        self.call_stack.last().map(|c| c.stack_index).unwrap_or(0) + stack_index
+    }
+}
+
+pub fn save_registers(registers: &mut Registers) -> Registers {
+    std::mem::replace(registers, std::array::from_fn(|_| Value::Null))
 }
 
 impl Vm {
@@ -30,6 +57,7 @@ impl Vm {
             stack_states: vec![],
             stack: std::array::from_fn(|_| Value::Null),
             stack_index: 0,
+            call_stack: vec![],
         }
     }
 }
@@ -39,11 +67,12 @@ pub type InterpretError = crate::expressions::EvaluateErrorDetails;
 macro_rules! binary_op {
     ($chunk: ident, $vm: ident, $op:tt) => {
         {
-            let register_0 = $chunk.code[$vm.ip];
+            let register_0 = $vm.get_register($chunk.code[$vm.ip]);
             $vm.ip += 1;
-            let register_1 = $chunk.code[$vm.ip];
+            let register_1 = $vm.get_register($chunk.code[$vm.ip]);
             $vm.ip += 1;
-            let dst_register = $chunk.code[$vm.ip];
+            let dst_register = $vm.get_register($chunk.code[$vm.ip]);
+
             $vm.ip += 1;
 
             let v_0 = $vm.registers[register_0 as usize].as_binary_number_op()?;
@@ -61,11 +90,11 @@ macro_rules! binary_op {
 macro_rules! eq_op {
     ($chunk: ident, $vm: ident, $op:tt) => {
         {
-            let register_0 = $chunk.code[$vm.ip];
+            let register_0 = $vm.get_register($chunk.code[$vm.ip]);
             $vm.ip += 1;
-            let register_1 = $chunk.code[$vm.ip];
+            let register_1 = $vm.get_register($chunk.code[$vm.ip]);
             $vm.ip += 1;
-            let dst_register = $chunk.code[$vm.ip];
+            let dst_register = $vm.get_register($chunk.code[$vm.ip]);
             $vm.ip += 1;
 
 
@@ -82,11 +111,11 @@ macro_rules! eq_op {
 macro_rules! cmp_op {
     ($chunk: ident, $vm: ident, $op:tt) => {
         {
-            let register_0 = $chunk.code[$vm.ip];
+            let register_0 = $vm.get_register($chunk.code[$vm.ip]);
             $vm.ip += 1;
-            let register_1 = $chunk.code[$vm.ip];
+            let register_1 = $vm.get_register($chunk.code[$vm.ip]);
             $vm.ip += 1;
-            let dst_register = $chunk.code[$vm.ip];
+            let dst_register = $vm.get_register($chunk.code[$vm.ip]);
             $vm.ip += 1;
 
             let v_0 = $vm.registers[register_0 as usize].as_binary_number_op()?;
@@ -115,16 +144,16 @@ pub fn execute_instruction(
             }
         }
         Instructions::Load => {
-            let register = chunk.code[vm.ip];
+            let register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
             let (constant, size) = Varint::read_bytes(chunk, vm.ip);
             vm.ip += size;
             vm.registers[register as usize] = chunk.constants[constant as usize].clone().into();
         }
         Instructions::Negate => {
-            let register = chunk.code[vm.ip];
+            let register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
-            let dst_register = chunk.code[vm.ip];
+            let dst_register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
             let v = vm.registers[register as usize].as_number()?;
             vm.registers[dst_register as usize] = Value::Number(-v);
@@ -133,9 +162,9 @@ pub fn execute_instruction(
             }
         }
         Instructions::Bang => {
-            let register = chunk.code[vm.ip];
+            let register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
-            let dst_register = chunk.code[vm.ip];
+            let dst_register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
 
             vm.registers[dst_register as usize] =
@@ -145,11 +174,11 @@ pub fn execute_instruction(
             }
         }
         Instructions::Add => {
-            let register_0 = chunk.code[vm.ip];
+            let register_0 = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
-            let register_1 = chunk.code[vm.ip];
+            let register_1 = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
-            let dst_register = chunk.code[vm.ip];
+            let dst_register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
             let v_0 = &vm.registers[register_0 as usize];
             let v_1 = &vm.registers[register_1 as usize];
@@ -177,12 +206,12 @@ pub fn execute_instruction(
         Instructions::GtEq => cmp_op!(chunk, vm, >=),
         Instructions::Return => return Ok(()),
         Instructions::Print => {
-            let register = chunk.code[vm.ip];
+            let register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
             println!("{}", vm.registers[register as usize]);
         }
         Instructions::DefineGlobal => {
-            let register = chunk.code[vm.ip];
+            let register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
             let (constant, size) = Varint::read_bytes(chunk, vm.ip);
             vm.ip += size;
@@ -196,7 +225,7 @@ pub fn execute_instruction(
             };
         }
         Instructions::GetGlobal => {
-            let register = chunk.code[vm.ip];
+            let register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
             let (constant, size) = Varint::read_bytes(chunk, vm.ip);
             vm.ip += size;
@@ -213,7 +242,7 @@ pub fn execute_instruction(
             };
         }
         Instructions::SetGlobal => {
-            let register = chunk.code[vm.ip];
+            let register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
             let (constant, size) = Varint::read_bytes(chunk, vm.ip);
             vm.ip += size;
@@ -222,7 +251,7 @@ pub fn execute_instruction(
 
             let variable = vm
                 .global_variables
-                .get_mut(*ident)
+                .get_mut(&ident)
                 .ok_or_else(|| InterpretError::UndefinedVariable(ident.to_string()))?;
 
             *variable = vm.registers[register as usize].clone();
@@ -237,18 +266,11 @@ pub fn execute_instruction(
             };
         }
         Instructions::DefineLocal => {
-            let last = match vm.stack_states.last() {
-                Some(v) => v,
-                None => return Err(InterpretError::LocalInGlobal),
-            };
-
             if DEBUG_TRACE_EXECUTION {
-                let depth = vm.stack_states.len();
-                let index = vm.stack_index as u8 - last;
-                eprintln!("Writing local {depth} {index}");
+                eprintln!("Writing local {}", vm.stack_index);
             }
 
-            let register = chunk.code[vm.ip];
+            let register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
 
             let register_v = std::mem::replace(&mut vm.registers[register as usize], Value::Null);
@@ -264,71 +286,53 @@ pub fn execute_instruction(
             }
         }
         Instructions::GetLocal => {
-            let output_register = chunk.code[vm.ip];
+            let output_register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
 
-            let depth = chunk.code[vm.ip] as usize;
+            let index = chunk.code[vm.ip];
             vm.ip += 1;
 
-            let index = chunk.code[vm.ip] as usize;
-            vm.ip += 1;
+ 
 
+
+            let index = vm.get_stack_index(index) as usize;
+            
             if DEBUG_TRACE_EXECUTION {
-                eprintln!("Getting local {depth} {index}");
+                eprintln!("Getting local {}",  index);
             }
-
-            if depth > vm.stack_states.len() {
-                return Err(EvaluateErrorDetails::UndefinedVariable(format!(
-                    "Local {depth} {index}: Depth is too high"
-                )));
-            }
-
-            let depth = vm.stack_states[depth - 1] as usize;
-            let index = depth + index;
-
+            
             if index >= vm.stack_index as usize {
                 return Err(EvaluateErrorDetails::UndefinedVariable(format!(
-                    "Stack({depth}, {}) {index}: Index is too high",
-                    index - depth
+                    "Stack {index}: Index is too high",
                 )));
             }
 
             vm.registers[output_register as usize] = vm.stack[index as usize].clone();
         }
         Instructions::SetLocal => {
-            let output_register = chunk.code[vm.ip];
+            let output_register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
 
-            let depth = chunk.code[vm.ip] as usize;
-            vm.ip += 1;
 
-            let index = chunk.code[vm.ip] as usize;
+            let index = chunk.code[vm.ip];
             vm.ip += 1;
-
+                
+            let index = vm.get_stack_index(index) as usize;
+            
             if DEBUG_TRACE_EXECUTION {
-                eprintln!("Getting local {depth} {index}");
+                eprintln!("Getting local {index}");
             }
-
-            if depth > vm.stack_states.len() {
-                return Err(EvaluateErrorDetails::UndefinedVariable(format!(
-                    "Local {depth} {index}: Depth is too high"
-                )));
-            }
-
-            let depth = vm.stack_states[depth - 1] as usize;
-            let index = depth + index;
-
+            
             if index >= vm.stack_index as usize {
                 return Err(EvaluateErrorDetails::UndefinedVariable(format!(
-                    "Stack({depth}, {}) {index}: Index is too high",
-                    index - depth
+                    "Stack {index}: Index is too high",
                 )));
             }
 
             vm.stack[index as usize] = vm.registers[output_register as usize].clone();
         }
         Instructions::JumpIfFalse => {
-            let register = chunk.code[vm.ip];
+            let register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
             let jmp_addr = u16::from_be_bytes([chunk.code[vm.ip], chunk.code[vm.ip + 1]]);
             vm.ip += 2;
@@ -337,12 +341,65 @@ pub fn execute_instruction(
                 vm.ip = jmp_addr as usize;
             }
         }
-
         Instructions::Jump => {
             let jmp_addr = u16::from_be_bytes([chunk.code[vm.ip], chunk.code[vm.ip + 1]]);
             vm.ip += 2;
 
             vm.ip = jmp_addr as usize;
+        }
+        Instructions::FunctionCall => {
+
+            let fn_register = vm.get_register(chunk.code[vm.ip]);
+            vm.ip += 1;
+            let num_args = chunk.code[vm.ip];
+            vm.ip += 1;
+            let reg = &vm.registers[fn_register as usize];
+            
+            match (reg.as_function(), reg.as_global_function()) {
+                (Ok(_), Ok(_)) => unreachable!(),
+                (Ok(f), Err(_)) => {
+                    if f.arguments_count() != num_args {
+                        return Err(EvaluateErrorDetails::InvalidArgCount);
+                    }   
+                    
+                    todo!()
+                },
+                (Err(_), Ok(g_f)) => {
+                    if g_f.arguments_count != num_args {
+                        return Err(EvaluateErrorDetails::InvalidArgCount);
+                    }
+                    let args_start = vm.call_stack.last().ok_or(EvaluateErrorDetails::CallStackEmpty)?.stack_index;
+                    
+                    let old: Vec<_> = if args_start < vm.stack_index as u8 {
+                        let slice = &mut vm.stack[args_start as usize .. vm.stack_index as usize];
+                        slice.iter_mut().map(std::mem::take).collect()
+                    } else {
+                        vec![]
+                    };
+                    
+                    let return_val = (g_f.callable)(old);
+                    
+                    let v = vm.call_stack.pop().ok_or(EvaluateErrorDetails::InvalidReturnStatement)?;
+                    vm.ip = v.return_ip;
+                    vm.registers[v.register_base as usize] = return_val;
+                    vm.stack_states.truncate(v.stack_index as usize);
+                },
+                (Err(e), Err(_)) => return Err(e),
+            };
+        },
+        Instructions::FunctionReturn => {
+            let return_val = std::mem::take(&mut vm.registers[vm.get_register(0) as usize]);
+            let v = vm.call_stack.pop().ok_or(EvaluateErrorDetails::InvalidReturnStatement)?;
+            vm.ip = v.return_ip;
+            vm.registers[v.register_base as usize] = return_val;
+            vm.stack_states.truncate(v.stack_index as usize);
+            
+        },
+        Instructions::PushCallStack => {
+            let register = vm.get_register(chunk.code[vm.ip]);
+            vm.ip += 1;
+            vm.call_stack.push(CallFrame { return_ip: vm.ip + FN_CALL_OFFSET as usize, register_base: register, stack_index: vm.stack_states.len() as u8 });
+            vm.stack_states.push(vm.stack_index as u8);
         }
     }
 

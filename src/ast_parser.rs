@@ -3,11 +3,11 @@ use std::{fmt::Display, iter::Peekable};
 use crate::{
     Token,
     expressions::{
-        Expressions, assignment_expression::AssignmentExpression, binary_expression::{BinaryExpression, BinaryOp}, equality_expression::{EqualityExpression, EqualityOp}, group::Group, identifier::Identifier, logical_expression::{LogicalExpression, LogicalOp}, relation_expression::{RelationalExpression, RelationalOp}, unary_expression::{UnaryExpression, UnaryOp}
+        Expressions, assignment_expression::AssignmentExpression, binary_expression::{BinaryExpression, BinaryOp}, call_expression::CallExpression, equality_expression::{EqualityExpression, EqualityOp}, group::Group, identifier::Identifier, logical_expression::{LogicalExpression, LogicalOp}, relation_expression::{RelationalExpression, RelationalOp}, unary_expression::{UnaryExpression, UnaryOp}
     },
     scanner::{Keyword, TokenKind},
     statements::{
-        Statements, block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, if_statement::IfStatement, print_statement::PrintStatement, while_statements::WhileStatement
+        Statements, block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement, print_statement::PrintStatement, while_statements::WhileStatement
     },
 };
 
@@ -241,6 +241,25 @@ impl<'a> AstParser<'a> {
 
         Ok(unary)
     }
+    
+    pub fn call(&mut self) -> Result<Expressions<'a>, ParserError> {
+        let mut expr = self.primary()?;
+        while self.token_kind() == TokenKind::LeftParen {
+            self.advance();
+            let mut arguments = vec![];
+            while self.token_kind() != TokenKind::RightParen {
+                arguments.push(self.expression()?);
+                if self.token_kind() != TokenKind::RightParen {
+                    self.consume(TokenKind::Comma)?;
+                }
+            }
+            self.consume(TokenKind::RightParen)?;
+            expr = CallExpression::new(Box::new(expr), arguments).into();
+        };
+        
+        Ok(expr.into())
+        
+    }
 
     pub fn unary(&mut self) -> Result<Expressions<'a>, ParserError> {
         self.unexpected_eof()?;
@@ -253,7 +272,7 @@ impl<'a> AstParser<'a> {
                 self.advance();
                 Ok(UnaryExpression::new(UnaryOp::Minus, Box::new(self.unary()?)).into())
             }
-            _ => self.primary(),
+            _ => self.call(),
         }
     }
 
@@ -322,12 +341,41 @@ impl<'a> AstParser<'a> {
 
         return Ok(statement);
     }
+    
+    pub fn function_declaration(&mut self) -> Result<Statements<'a>, ParserError> {
+        let fun_name = self.identifier()?;
+        self.consume(TokenKind::LeftParen)?;
+        let mut args = vec![];
+        while self.token_kind() != TokenKind::RightParen {
+            args.push(self.identifier()?);
+            if self.token_kind() != TokenKind::Comma {
+                break;
+            }
+        }
+        
+        self.consume(TokenKind::RightParen)?;
+        
+        let mut statements = vec![];
+        self.consume(TokenKind::LeftBrace)?;
+        while self.token_kind() != TokenKind::RightBrace {
+            statements.push(self.statement()?);
+        }
+        self.consume(TokenKind::RightBrace)?;
+        
+        let statement = FunctionDeclareStatement::new(fun_name, args, statements);
+        
+        return Ok(statement.into())
+    }
 
     pub fn declaration(&mut self) -> Result<Statements<'a>, ParserError> {
         match self.token_kind() {
             TokenKind::Keyword(Keyword::Var) => {
                 self.advance();
                 Ok(self.variable_declaration()?.into())
+            }
+            TokenKind::Keyword(Keyword::Fun) => {
+                self.advance();
+                Ok(self.function_declaration()?.into())
             }
             _ => self.statement(),
         }
@@ -390,7 +438,6 @@ impl<'a> AstParser<'a> {
             self.advance();
             None
         };
-        eprintln!("Got declaration");
         let test: Option<Expressions<'a>> = 
             if self.token_kind() != TokenKind::Semicolon {
                 Some(self.expression()?.into())
@@ -399,7 +446,6 @@ impl<'a> AstParser<'a> {
                 None
             };
         self.consume(TokenKind::Semicolon)?;
-        eprintln!("Got declaration");
         
         let inc: Option<Expressions<'a>> = 
             if self.token_kind() != TokenKind::RightParen {
@@ -410,7 +456,6 @@ impl<'a> AstParser<'a> {
             };
         
         self.consume(TokenKind::RightParen)?;      
-        eprintln!("Got declaration");
         
         let statement = Box::new(self.statement()?);
         let end_line = self.line_number();

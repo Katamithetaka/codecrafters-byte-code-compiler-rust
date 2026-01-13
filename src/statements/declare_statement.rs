@@ -43,10 +43,11 @@ impl<'a> CodeGenerator<'a> for DeclareStatement<'a> {
 
                 Ok(())
             }
-            IdentifierKind::LocalScope { depth: _, index: _ } => {
+            IdentifierKind::LocalScope { .. } => {
                 chunk.write_declare_local(dist, self.ident.line as i32);
                 Ok(())
             }
+            IdentifierKind::UpperScope { .. } => panic!("tried to declare a upper scope identifier?"),
         }
     }
 }
