@@ -354,7 +354,9 @@ pub fn execute_instruction(
             let num_args = chunk.code[vm.ip];
             vm.ip += 1;
             let reg = &vm.registers[fn_register as usize];
-            
+            vm.call_stack.last().ok_or(EvaluateErrorDetails::CallStackEmpty)?;
+            let last = vm.call_stack.len() - 1;
+            vm.call_stack[last].return_ip = vm.ip;
             match (reg.as_function(), reg.as_global_function()) {
                 (Ok(_), Ok(_)) => unreachable!(),
                 (Ok(f), Err(_)) => {
@@ -406,7 +408,7 @@ pub fn execute_instruction(
     Ok(())
 }
 
-const DEBUG_TRACE_EXECUTION: bool = false;
+const DEBUG_TRACE_EXECUTION: bool = true;
 pub fn interpret(chunk: &Chunk) -> Result<(), EvaluateError> {
     let mut vm = Vm::new();
     let mut previous_ip = 0;

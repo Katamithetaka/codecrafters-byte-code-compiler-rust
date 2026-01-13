@@ -351,6 +351,7 @@ impl<'a> AstParser<'a> {
             if self.token_kind() != TokenKind::Comma {
                 break;
             }
+            self.advance();
         }
         
         self.consume(TokenKind::RightParen)?;

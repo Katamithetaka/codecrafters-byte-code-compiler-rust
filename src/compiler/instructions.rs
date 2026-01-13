@@ -110,7 +110,7 @@ pub fn jmp_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     let jmp_addr = u16::from_be_bytes([chunk.code[offset + 1], chunk.code[offset + 2]]);
     eprintln!("{name:15} addr[{}]", jmp_addr);
 
-    return offset + 4;
+    return offset + 3;
 }
 
 
