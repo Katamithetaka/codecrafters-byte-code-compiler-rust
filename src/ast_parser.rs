@@ -358,7 +358,7 @@ impl<'a> AstParser<'a> {
         let mut statements = vec![];
         self.consume(TokenKind::LeftBrace)?;
         while self.token_kind() != TokenKind::RightBrace {
-            statements.push(self.statement()?);
+            statements.push(self.declaration()?);
         }
         self.consume(TokenKind::RightBrace)?;
         
@@ -368,6 +368,8 @@ impl<'a> AstParser<'a> {
     }
 
     pub fn declaration(&mut self) -> Result<Statements<'a>, ParserError> {
+        dbg!(self.token_kind());
+        
         match self.token_kind() {
             TokenKind::Keyword(Keyword::Var) => {
                 self.advance();

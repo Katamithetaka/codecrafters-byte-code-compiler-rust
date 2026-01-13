@@ -362,7 +362,7 @@ pub fn execute_instruction(
                         return Err(EvaluateErrorDetails::InvalidArgCount);
                     }   
                     
-                    todo!()
+                    vm.ip = f.begin() as usize;
                 },
                 (Err(_), Ok(g_f)) => {
                     if g_f.arguments_count != num_args {
