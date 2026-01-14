@@ -44,15 +44,13 @@ impl<'a> CodeGenerator<'a> for CallExpression<'a> {
         let dist = self.dst_or_default(dst_register, &reserved_registers);
     
         let dst = self.next_dst(dist, 1, &reserved_registers);
+        self.lhs.write_expression(chunk, Some(dist), reserved_registers.clone())?;
         
         
         for argument in &mut self.arguments {
             argument.write_expression(chunk, Some(dst), reserved_registers.clone())?;
             chunk.write_declare_local(dst, argument.line_number() as i32);
         }
-        chunk.write_call_stack_push(dist, self.lhs.line_number() as i32);
-        self.lhs.write_expression(chunk, Some(dist), reserved_registers.clone())?;
-        
         chunk.write_fn_call(dist, self.arguments.len() as u8, self.lhs.line_number() as i32);
         
         

@@ -31,7 +31,6 @@ pub enum Instructions {
     Jump = 25,
     FunctionCall = 26,
     FunctionReturn = 27,
-    PushCallStack = 28
 }
 
 pub fn simple_instruction(name: &str, offset: usize) -> usize {
@@ -163,7 +162,6 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize, previous_offset: us
         Some(Instructions::Jump) => jmp_instruction("OP_JMP", chunk, offset),
         Some(Instructions::FunctionCall) => fn_call_instruction("OP_FN_CALL", chunk, offset),
         Some(Instructions::FunctionReturn) => simple_instruction("OP_FN_RT", offset),
-        Some(Instructions::PushCallStack) => single_register_instruction("OP_FN_PUSH", chunk, offset),
 
         None => offset + 1,
     }

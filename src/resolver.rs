@@ -521,11 +521,13 @@ impl Resolver {
             None => {}
         };
         self.push_local_scope();
+        self.stack_index = 0;
         match self.scope.get_local_scope_mut() {
             Some(v) => {
                 statement
                     .args
                     .iter_mut()
+                    
                     .map(|mut arg| {
                         let result = v.declare_identifier(&mut arg, self.stack_index);
                         self.stack_index += 1;

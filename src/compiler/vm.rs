@@ -12,7 +12,6 @@ use crate::{
 
 const STACK_MAX_SIZE: u32 = u16::MAX as u32;
 const REGISTER_MAX_SIZE: usize = 256;
-const FN_CALL_OFFSET: u8 = 4;
 const DEBUG_TRACE_EXECUTION: bool = false;
 type Registers = [Value<String>; REGISTER_MAX_SIZE];
 
@@ -355,6 +354,10 @@ pub fn execute_instruction(
 
             let fn_register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
+            
+            vm.call_stack.push(CallFrame { return_ip: vm.ip + 3 as usize, register_base: fn_register, stack_index: vm.stack_index as u16, stack_state_index: vm.stack_states.len() });
+            vm.stack_states.push(vm.stack_index as u16);
+            
             let num_args = chunk.code[vm.ip];
             vm.ip += 1;
             let reg = &vm.registers[fn_register as usize];
@@ -407,12 +410,7 @@ pub fn execute_instruction(
             vm.stack_states.truncate(dbg!(v.stack_state_index) as usize);
             
         },
-        Instructions::PushCallStack => {
-            let register = vm.get_register(chunk.code[vm.ip]);
-            vm.ip += 1;
-            vm.call_stack.push(CallFrame { return_ip: vm.ip + FN_CALL_OFFSET as usize, register_base: register, stack_index: vm.stack_index as u16, stack_state_index: vm.stack_states.len() });
-            vm.stack_states.push(vm.stack_index as u16);
-        }
+
     }
 
     Ok(())

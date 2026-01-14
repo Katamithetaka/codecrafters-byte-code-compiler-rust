@@ -180,10 +180,7 @@ impl<'a> Chunk<'a> {
         self.write_instruction(Instructions::PopStack, line);
     }
     
-    pub fn write_call_stack_push(&mut self, register_base: u8, line: i32) {
-        self.write_instruction(Instructions::PushCallStack, line);
-        self.write(register_base, line);
-    }
+
     
     pub fn write_fn_call(&mut self, fn_register: u8, num_args: u8, line: i32) {
         self.write_instruction(Instructions::FunctionCall, line);
