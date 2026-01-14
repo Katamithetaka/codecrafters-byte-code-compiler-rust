@@ -1,7 +1,7 @@
 use crate::compiler::{chunk::Chunk, value::print_value, varint::Varint};
 
 #[repr(u8)]
-#[derive(strum::FromRepr)]
+#[derive(strum::FromRepr, Clone, Copy)]
 pub enum Instructions {
     Return = 0,
     Constant = 1,
@@ -31,6 +31,7 @@ pub enum Instructions {
     Jump = 25,
     FunctionCall = 26,
     FunctionReturn = 27,
+    DebugBreak = 28,
 }
 
 pub fn simple_instruction(name: &str, offset: usize) -> usize {
@@ -162,6 +163,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize, previous_offset: us
         Some(Instructions::Jump) => jmp_instruction("OP_JMP", chunk, offset),
         Some(Instructions::FunctionCall) => fn_call_instruction("OP_FN_CALL", chunk, offset),
         Some(Instructions::FunctionReturn) => simple_instruction("OP_FN_RT", offset),
+        Some(Instructions::DebugBreak) => simple_instruction("OP_DEBUG_BREAK", offset),
 
         None => offset + 1,
     }

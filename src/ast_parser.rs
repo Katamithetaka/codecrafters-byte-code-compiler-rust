@@ -11,19 +11,31 @@ use crate::{
     },
 };
 
+/// Represents the state of the AST parser, including the current position,
+/// the list of tokens being parsed, and an iterator over the tokens.
 pub struct AstParserState<'a> {
+    /// The current position in the token stream.
     pub pos: usize,
+    /// The list of tokens to be parsed.
     pub tokens: &'a [Token<'a>],
+    /// A peekable iterator over the tokens.
     pub it: Peekable<std::slice::Iter<'a, Token<'a>>>,
 }
 
+/// The main AST parser that processes tokens and generates an abstract syntax tree (AST).
 pub struct AstParser<'a> {
+    /// The internal state of the parser.
     state: AstParserState<'a>,
 }
 
 #[derive(thiserror::Error, Debug)]
+/// Represents an error encountered during parsing.
+///
+/// This struct contains details about the error and the line number where it occurred.
 pub struct ParserError {
+    /// The specific details of the parsing error.
     pub error: ParserErrorDetails,
+    /// The line number where the error occurred.
     pub line: usize,
 }
 
@@ -33,21 +45,36 @@ impl Display for ParserError {
     }
 }
 
+/// Enum representing the various types of errors that can occur during parsing.
 #[derive(thiserror::Error, Debug)]
 pub enum ParserErrorDetails {
+    /// Error for attempting to redefine a variable in the local scope.
     #[error("Tried to redefine variable {0} in local scope")]
     RedefinedVariableInLocalScope(String),
+    /// Error for encountering an unexpected end of file.
     #[error("Expected token, got EOF")]
     UnexpectedEof,
+    /// Error for encountering an unexpected token.
     #[error("Unexpecpected token {0}, expected {1}")]
     UnexpectedToken(TokenKind, String),
+    /// Error for encountering an invalid token.
     #[error("Unexpecpected token {0}, expected {1}")]
     InvalidToken(TokenKind, TokenKind),
+    /// Error for an invalid assignment target.
     #[error("Invalid assignment target")]
     InvalidAssignementTarget,
 }
 
 impl<'a> AstParser<'a> {
+    /// Creates a new instance of the AST parser with the given tokens.
+    ///
+    /// # Arguments
+    ///
+    /// * `tokens` - A slice of tokens to be parsed.
+    ///
+    /// # Returns
+    ///
+    /// A new `AstParser` instance.
     pub fn new(tokens: &'a [Token<'a>]) -> Self {
         Self {
             state: AstParserState {
@@ -58,10 +85,20 @@ impl<'a> AstParser<'a> {
         }
     }
 
+    /// Returns a reference to the next token in the stream without consuming it.
+    ///
+    /// # Returns
+    ///
+    /// An `Option` containing a reference to the next token, or `None` if the end of the stream is reached.
     pub fn peek(&mut self) -> Option<&&Token<'_>> {
         self.state.it.peek()
     }
 
+    /// Advances the parser to the next token in the stream.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the current token.
     pub fn advance(&mut self) -> &'a Token<'a> {
         let token = self.state.it.next();
         self.state.pos += 1;
@@ -69,6 +106,16 @@ impl<'a> AstParser<'a> {
         token.unwrap()
     }
 
+    /// Consumes the current token if it matches the expected token kind.
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - The expected token kind.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the token matches the expected kind.
+    /// * `Err(ParserError)` if the token does not match the expected kind.
     pub fn consume(&mut self, token: TokenKind) -> Result<(), ParserError> {
         if self.token_kind() == token {
             self.advance();
@@ -517,6 +564,9 @@ impl<'a> AstParser<'a> {
     }
 }
 
+/// The `prelude` module re-exports commonly used types and functions from this module.
+///
+/// This allows for easier imports in other parts of the codebase.
 pub mod prelude {
     pub use super::AstParser;
     pub use super::ParserError;

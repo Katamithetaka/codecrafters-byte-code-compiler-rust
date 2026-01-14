@@ -1,3 +1,6 @@
+/// This module defines various statement types and traits used in the interpreter.
+/// Statements represent executable units of code in the language being interpreted.
+
 use std::fmt::Debug;
 
 use crate::{
@@ -17,25 +20,57 @@ pub mod for_statement;
 pub mod function_declaration_statement;
 pub mod return_statement;
 
+/// A trait representing a generic statement in the interpreter.
+/// 
+/// Statements are executable units of code, such as variable declarations,
+/// loops, or function calls. Implementors of this trait must also implement
+/// the `CodeGenerator` trait to allow for code generation.
 pub trait Statement<'a>: Debug + CodeGenerator<'a> {}
 
+/// Represents the various types of statements in the language.
+///
+/// Each variant corresponds to a specific type of statement, such as a block,
+/// a variable declaration, or a function declaration.
 #[derive(derive_more::From, derive_more::TryInto, Debug)]
 pub enum Statements<'a> {
+    /// A variable declaration statement.
     DeclareStatement(DeclareStatement<'a>),
+
+    /// A block of statements enclosed in braces.
     BlockStatement(BlockStatement<'a>),
+
+    /// An expression statement, which evaluates an expression.
     ExprStatement(ExprStatement<'a>),
+
+    /// A print statement, which outputs the result of an expression.
     PrintStatement(PrintStatement<'a>),
+
+    /// An if statement, which conditionally executes code based on a boolean expression.
     IfStatement(IfStatement<'a>),
+
+    /// A while statement, which executes a block of code as long as a condition is true.
     WhileStatement(WhileStatement<'a>),
+
+    /// A for statement, which iterates over a range or collection.
     ForStatement(ForStatement<'a>),
+
+    /// A function declaration statement.
     FunctionDeclareStatement(FunctionDeclareStatement<'a>),
+
+    /// A return statement, which exits a function and optionally returns a value.
     ReturnStatement(ReturnStatement<'a>),
-    
 }
+    
 
 impl Statements<'_> {
+    /// Checks if the statement is a return statement.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the statement is a `ReturnStatement`, otherwise `false`.
     pub fn is_return(&self) -> bool {
         match self {
+            Self::ReturnStatement(_) => true,
             _ => false
         }
     }
@@ -82,4 +117,18 @@ impl<'a> CodeGenerator<'a> for Statements<'a> {
     }
 }
 
-pub mod prelude {}
+/// The `prelude` module re-exports commonly used types and traits from this module.
+///
+/// This allows for easier imports in other parts of the codebase.
+pub mod prelude {
+    pub use super::Statements;
+    pub use super::block_statement::BlockStatement;
+    pub use super::declare_statement::DeclareStatement;
+    pub use super::expression_statement::ExprStatement;
+    pub use super::for_statement::ForStatement;
+    pub use super::function_declaration_statement::FunctionDeclareStatement;
+    pub use super::if_statement::IfStatement;
+    pub use super::print_statement::PrintStatement;
+    pub use super::return_statement::ReturnStatement;
+    pub use super::while_statements::WhileStatement;
+}

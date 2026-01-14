@@ -7,15 +7,18 @@ use crate::{
         value::print_value,
         varint::Varint,
     },
-    expressions::{EvaluateError, EvaluateErrorDetails, Value},
+    expressions::{EvaluateError, EvaluateErrorDetails},
 };
+
+
+pub use crate::expressions::Value;
 
 const STACK_MAX_SIZE: u32 = u16::MAX as u32;
 const REGISTER_MAX_SIZE: usize = 256;
 const DEBUG_TRACE_EXECUTION: bool = false;
 type Registers = [Value<String>; REGISTER_MAX_SIZE];
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallFrame {
     pub return_ip: usize,
     pub register_base: u8,
@@ -31,7 +34,7 @@ pub struct Vm {
     pub registers: Registers,
     pub global_variables: HashMap<String, Value<String>>,
     pub stack_states: Vec<u16>,
-    pub stack: [Value<String>; STACK_MAX_SIZE as usize],
+    pub stack: Vec<Value<String>>,
     pub stack_index: u32,
     pub call_stack: Vec<CallFrame>
 }
@@ -57,7 +60,7 @@ impl Vm {
             registers: std::array::from_fn(|_| Value::Null),
             global_variables: Default::default(),
             stack_states: vec![],
-            stack: std::array::from_fn(|_| Value::Null),
+            stack: vec![Value::Null; STACK_MAX_SIZE as usize],
             stack_index: 0,
             call_stack: vec![],
         }
@@ -284,7 +287,7 @@ pub fn execute_instruction(
             };
 
             if (vm.stack_index) >= STACK_MAX_SIZE {
-                dbg!(vm.stack_index);
+                vm.stack_index;
                 return Err(InterpretError::StackOverflow);
             }
         }
@@ -407,17 +410,23 @@ pub fn execute_instruction(
             vm.registers[v.register_base as usize] = return_val;
             vm.stack_index = v.stack_index as u32;
                 
-            vm.stack_states.truncate(dbg!(v.stack_state_index) as usize);
+            vm.stack_states.truncate(v.stack_state_index as usize);
             
         },
+        Instructions::DebugBreak => {       
+            for (i, v) in vm.registers.iter().enumerate().filter(|(_, i)| !i.is_null()) {
+                println!("r{i} = {v}");
+            }
+            
+            std::io::stdin().read_line(&mut String::new()).map_err(|_| EvaluateErrorDetails::StdinFailed)?;
+        }
 
     }
 
     Ok(())
 }
 
-pub fn interpret(chunk: &Chunk) -> Result<(), EvaluateError> {
-    let mut vm = Vm::new();
+pub fn interpret_with_vm(vm: &mut Vm, chunk: &Chunk)  -> Result<(), EvaluateError> {
     let mut previous_ip = 0;
     while vm.ip < chunk.code.len() {
         let instruction = chunk.code[vm.ip];
@@ -430,7 +439,7 @@ pub fn interpret(chunk: &Chunk) -> Result<(), EvaluateError> {
         vm.ip += 1;
 
         let result = match Instructions::from_repr(instruction) {
-            Some(v) => execute_instruction(&mut vm, chunk, v),
+            Some(v) => execute_instruction(vm, chunk, v),
             None => Err(InterpretError::UnexpectedOpCode(instruction)),
         };
 
@@ -449,3 +458,9 @@ pub fn interpret(chunk: &Chunk) -> Result<(), EvaluateError> {
 
     return Ok(());
 }
+
+pub fn interpret(chunk: &Chunk) -> Result<(), EvaluateError> {
+    let mut vm = Box::new(Vm::new());
+    interpret_with_vm(&mut vm, chunk)
+}
+

@@ -7,33 +7,72 @@ use crate::{
     },
 };
 
+/// Module containing the definition and implementation of assignment expressions.
 pub mod assignment_expression;
+/// Module containing the definition and implementation of binary expressions.
 pub mod binary_expression;
+/// Module containing the definition and implementation of equality expressions.
 pub mod equality_expression;
+/// Module containing the definition and implementation of group expressions.
 pub mod group;
+/// Module containing the definition and implementation of identifiers.
 pub mod identifier;
+/// Module containing the definition and implementation of literal values.
 pub mod literal;
+/// Module containing the definition and implementation of logical expressions.
 pub mod logical_expression;
+/// Module containing the definition and implementation of relational expressions.
 pub mod relation_expression;
+/// Module containing the definition and implementation of unary expressions.
 pub mod unary_expression;
+/// Module containing the definition and implementation of call expressions.
 pub mod call_expression;
 
+/// The `prelude` module re-exports commonly used types and functions from this module.
+///
+/// This allows for easier imports in other parts of the codebase.
+pub mod prelude {
+    pub use super::{
+        assignment_expression::AssignmentExpression,
+        binary_expression::{BinaryExpression, BinaryOp},
+        equality_expression::{EqualityExpression, EqualityOp},
+        group::Group,
+        identifier::Identifier,
+        literal::Literal,
+        logical_expression::{LogicalExpression, LogicalOp},
+        relation_expression::{RelationalExpression, RelationalOp},
+        unary_expression::{UnaryExpression, UnaryOp},
+        call_expression::CallExpression,
+        Expressions, Expression, EvaluateError, EvaluateErrorDetails, Value,
+    };
+}
+
+/// Represents the internal details of a function, including its name, starting position, and argument count.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionInner {
+    /// The name of the function.
     pub name: String,
+    /// The starting position of the function in the bytecode.
     pub begin: u16,
+    /// The number of arguments the function takes.
     pub arguments_count: u8,
 }
 
+/// Represents a user-defined function in the interpreter.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
+    /// The internal details of the function.
     inner: Rc<FunctionInner>
 }
 
+/// Represents a global function that can be called from anywhere in the program.
 #[derive(Clone, Debug)] 
 pub struct GlobalFunction {
+    /// A reference-counted function pointer to the callable implementation.
     pub callable: Rc<fn(Vec<Value<String>>) -> Value<String>>,
+    /// The name of the global function.
     pub name: &'static str,
+    /// The number of arguments the global function takes.
     pub arguments_count: u8,
 }
 
@@ -80,14 +119,22 @@ impl Display for Function {
 }
 
 
+/// Represents a value in the interpreter, which can be one of several types.
 #[derive(Clone, PartialEq, Debug)]
 pub enum Value<S> {
+    /// A numeric value.
     Number(f64),
+    /// A string value.
     String(S),
+    /// A null value.
     Null,
+    /// A boolean value.
     Boolean(bool),
+    /// A user-defined function.
     Function(Function),
+    /// A global function.
     GlobalFunction(GlobalFunction),
+    /// A reference-counted, mutable value.
     Cell(Rc<RefCell<Value<S>>>)
 }
 
@@ -139,6 +186,14 @@ impl<'a> From<Value<&'a str>> for Value<String> {
 }
 
 impl<S: ToString> Value<S> {
+    pub fn is_null(&self) -> bool {
+        match self {
+            Value::Null => true,
+            Value::Cell(cell) => cell.borrow().is_null(), // recursive unwrap
+            _ => false,
+        }
+    }
+    
     /// Recursively unwrap a number, even if it's inside a Cell
     pub fn as_number(&self) -> Result<f64, EvaluateErrorDetails> {
         match self {
@@ -193,44 +248,67 @@ impl<S: ToString> Value<S> {
 }
 
 
+/// Enum representing the various types of errors that can occur during expression evaluation.
 #[derive(thiserror::Error, Debug)]
 pub enum EvaluateErrorDetails {
+    /// Error for encountering an unexpected return statement.
     #[error("Unexpected return statement")]
     UnexpectedReturn,
+    /// Error for encountering an unknown operation code.
     #[error("Unknown Operation {0}")]
     UnexpectedOpCode(u8),
+    /// General evaluation error with a message.
     #[error("Evaluate error: {0}")]
     Error(String),
-    #[error("Expected value from expressio, got None")]
+    /// Error for expecting a value but finding none.
+    #[error("Expected value from expression, got None")]
     ExpectedValue,
+    /// Error for binary operations requiring numeric operands.
     #[error("Operands must be numbers.")]
     BinaryNumberOp,
+    /// Error for expecting a numeric operand.
     #[error("Operand must be number.")]
     ExpectedNumber,
+    /// Error for expecting a string operand.
     #[error("Operand must be string.")]
     ExpectedString,
+    /// Error for expecting a function operand.
     #[error("Operand must be function.")]
     ExpectedFunction,
+    /// Error for mismatched operand types in binary operations.
     #[error("Operands must be two numbers or two strings. ")]
     UnmatchedTypes,
+    /// Error for referencing an undefined variable.
     #[error("Undefined variable: {0}")]
     UndefinedVariable(String),
+    /// Error for expecting an identifier to be a string but finding otherwise.
     #[error("Expected identifier to be a string, but it wasn't")]
     InvalidIdentifierType,
+    /// Error for defining a local variable in the global scope.
     #[error("Tried to define a local variable in global scope")]
     LocalInGlobal,
+    /// Error for attempting to pop the stack in the global scope.
     #[error("Tried to pop stack in global scope.")]
     InvalidStackPop,
+    /// Error for exceeding the maximum number of local variables in a scope.
     #[error("Stack overflow: Too many locals defined in local scopes")]
     StackOverflow,
+    /// Error for providing an invalid number of arguments to a function.
     #[error("Invalid number of arguments when calling function!")]
     InvalidArgCount,
+    /// Error for calling a function without pushing to the call stack.
     #[error("Call stack wasn't pushed before calling a function!")]
     CallStackEmpty,
+    /// Error for encountering an invalid return statement.
     #[error("Invalid return statement")]
     InvalidReturnStatement,
+    /// Error for a jump statement exceeding the boundaries of a `u16`.
     #[error("Jump statement didn't fit in the boundaries of a u16")]
     CodeTooLong,
+    /// Error for failing to fetch stdin during a debug break.
+    #[error("Debug break couldn't fetch stdin")]
+    StdinFailed,
+    
 }
 
 #[derive(thiserror::Error, Debug)]

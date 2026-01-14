@@ -1,5 +1,5 @@
 use crate::{
-    compiler::CodeGenerator,
+    compiler::{CodeGenerator, instructions::Instructions},
     expressions::{Expression, Expressions},
     statements::Statement,
 };
@@ -27,6 +27,7 @@ impl<'a> CodeGenerator<'a> for PrintStatement<'a> {
         self.expr
             .write_expression(chunk, Some(dist), reserved_registers)?;
         chunk.write_print(dist, self.expr.line_number() as i32);
+        chunk.write_instruction(Instructions::DebugBreak, 0);
 
         Ok(())
     }

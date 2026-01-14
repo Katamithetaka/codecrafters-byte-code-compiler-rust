@@ -1,5 +1,5 @@
 use crate::{
-    compiler::CodeGenerator,
+    compiler::{CodeGenerator, instructions::Instructions},
     expressions::{
         EvaluateError, EvaluateErrorDetails, Function, Value,
         identifier::{Identifier, IdentifierKind},
@@ -37,8 +37,6 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
     ) -> crate::compiler::Result {
         let dist = self.dst_or_default(dst, &reserved_registers);
 
-
-
         match self.ident.kind {
             IdentifierKind::GlobalScope => {
                 let constant = chunk
@@ -58,6 +56,7 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
         let mut wrote_return = false;
         for statement in &mut self.statements {
             statement.write_expression(chunk, Some(0), vec![])?; // this means that if there is a return statement it'll automatically be in register 0
+            
             if statement.is_return() {
                 chunk.write_function_return(self.ident.line as i32);
                 wrote_return = true;

@@ -5,29 +5,3 @@ fun fib(n) {
 var start = clock();
 print fib(10);
 print (clock() - start);
-
-fun makeFilter() {
-  fun filter(n) {
-    if (n < 42) {
-      return false;
-    }
-    return true;
-  }
-  return filter;
-}
-
-// This function applies a function to a list of numbers
-fun applyToNumbers(f, count) {
-  var n = 0;
-  while (n < count) {
-    if (f(n)) {
-      print n;
-    }
-    n = n + 1;
-  }
-}
-
-var greaterThanX = makeFilter();
-
-print "Numbers >= 42:";
-applyToNumbers(greaterThanX, 42 + 5);

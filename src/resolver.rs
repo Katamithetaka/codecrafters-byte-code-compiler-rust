@@ -13,11 +13,19 @@ use crate::{
     },
 };
 
+/// Represents a local scope in the resolver, containing identifiers and their associated stack indices.
 pub struct LocalScope {
+    /// A map of identifier names to their stack indices.
     idents: HashMap<String, u16>,
 }
 
+/// Implementation of methods for `LocalScope`.
 impl LocalScope {
+    /// Creates a new, empty `LocalScope`.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `LocalScope` with an empty identifier map.
     pub fn new() -> Self {
         Self {
             idents: HashMap::new(),
@@ -49,17 +57,27 @@ impl Default for LocalScope {
     }
 }
 
+/// Represents the different types of scopes in the resolver.
 pub enum ResolverScope {
+    /// The global scope, containing global variables and functions.
     GlobalScope,
+    /// A local scope nested within another scope.
     LocalScope(Box<ResolverScope>, LocalScope),
+    /// A function body scope, containing local variables and parameters.
     FunctionBody(Box<ResolverScope>, LocalScope),
+    /// A class body scope, containing class-level variables and methods.
     ClassBody(Box<ResolverScope>, LocalScope),
+    /// A derived class body scope, inheriting from another class.
     DerivedClassBody(Box<ResolverScope>, LocalScope),
+    /// A method body scope, containing method-specific variables.
     MethodBody(Box<ResolverScope>, LocalScope),
 }
 
+/// Represents the kind of a local identifier in the resolver.
 pub enum LocalIdentifierKind {
+    /// An identifier defined in the current local scope.
     LocalScope,
+    /// An identifier defined in an upper (enclosing) scope.
     UpperScope,
 }
 
@@ -186,13 +204,30 @@ impl ResolverScope {
     }
 }
 
+/// The main resolver responsible for managing variable scopes and resolving identifiers.
 pub struct Resolver {
+    /// The current scope of the resolver.
     scope: ResolverScope,
+    /// The current stack index for variable allocation.
     stack_index: u16,
+    /// The stack of variable indices for nested scopes.
     stack: Vec<u16>,
 }
 
+/// The `prelude` module re-exports commonly used types from the resolver module.
+///
+/// This allows for easier imports in other parts of the codebase.
+pub mod prelude {
+    pub use super::{Resolver, ResolverScope, LocalScope, LocalIdentifierKind};
+}
+
+/// Implementation of methods for `Resolver`.
 impl Resolver {
+    /// Creates a new instance of the resolver with a global scope.
+    ///
+    /// # Returns
+    ///
+    /// A new `Resolver` instance with an empty stack and global scope.
     pub fn new() -> Self {
         Self {
             scope: ResolverScope::GlobalScope,
