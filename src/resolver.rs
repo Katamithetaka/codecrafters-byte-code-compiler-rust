@@ -9,15 +9,12 @@ use crate::{
         Expressions, assignment_expression::AssignmentExpression, binary_expression::BinaryExpression, call_expression::CallExpression, equality_expression::EqualityExpression, group::Group, identifier::{Identifier, IdentifierKind}, logical_expression::LogicalExpression, relation_expression::RelationalExpression, unary_expression::UnaryExpression
     },
     statements::{
-        Statements, block_statement::BlockStatement, declare_statement::DeclareStatement,
-        expression_statement::ExprStatement, for_statement::ForStatement,
-        function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement,
-        print_statement::PrintStatement, while_statements::WhileStatement,
+        Statements, block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement, print_statement::PrintStatement, return_statement::ReturnStatement, while_statements::WhileStatement
     },
 };
 
 pub struct LocalScope {
-    idents: HashMap<String, u8>,
+    idents: HashMap<String, u16>,
 }
 
 impl LocalScope {
@@ -30,7 +27,7 @@ impl LocalScope {
     pub fn declare_identifier(
         &mut self,
         name: &mut Identifier,
-        stack_index: u8,
+        stack_index: u16,
     ) -> Result<(), ParserError> {
         if self.idents.contains_key(name.token) {
             return Err(ParserError {
@@ -177,7 +174,7 @@ impl ResolverScope {
         }
     }
 
-    pub fn get_local_identifier_slot(&self, name: &str) -> Option<u8> {
+    pub fn get_local_identifier_slot(&self, name: &str) -> Option<u16> {
         match self.get_local_scope() {
             Some(scope) => scope.idents.get(name).copied().or_else(|| {
                 self.get_parent_scope()
@@ -191,8 +188,8 @@ impl ResolverScope {
 
 pub struct Resolver {
     scope: ResolverScope,
-    stack_index: u8,
-    stack: Vec<u8>,
+    stack_index: u16,
+    stack: Vec<u16>,
 }
 
 impl Resolver {
@@ -428,6 +425,13 @@ impl Resolver {
         let print = PrintStatement::new(self.resolve_expr(print.expr)?);
         Ok(print.into())
     }
+    pub fn visit_return<'a>(
+        &mut self,
+        print: ReturnStatement<'a>,
+    ) -> Result<Statements<'a>, ParserError> {
+        let print = ReturnStatement::new(print.expr.map(|e| self.resolve_expr(e)).transpose()?, print.line_number);
+        Ok(print.into())
+    }
 
     pub fn visit_declare<'a>(
         &mut self,
@@ -435,7 +439,7 @@ impl Resolver {
     ) -> Result<Statements<'a>, ParserError> {
         match self.scope.get_local_scope_mut() {
             Some(v) => {
-                v.declare_identifier(&mut declare.ident, self.stack_index as u8)?;
+                v.declare_identifier(&mut declare.ident, self.stack_index )?;
                 self.stack_index += 1;
             }
             None => {}
@@ -556,6 +560,7 @@ impl Resolver {
             Statements::FunctionDeclareStatement(function_declare_statement) => {
                 self.visit_function_declare(function_declare_statement)
             }
+            Statements::ReturnStatement(return_statement) => self.visit_return(return_statement),
         }
     }
 

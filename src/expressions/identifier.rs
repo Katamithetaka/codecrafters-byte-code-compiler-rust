@@ -9,8 +9,8 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IdentifierKind {
     GlobalScope,
-    LocalScope { slot: u8 },
-    UpperScope { slot: u8 },
+    LocalScope { slot: u16 },
+    UpperScope { slot: u16 },
     
 }
 

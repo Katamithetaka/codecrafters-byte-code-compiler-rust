@@ -43,8 +43,6 @@ impl<'a> CodeGenerator<'a> for CallExpression<'a> {
     ) -> crate::compiler::Result {
         let dist = self.dst_or_default(dst_register, &reserved_registers);
     
-        chunk.write_call_stack_push(dist, self.lhs.line_number() as i32);
-        self.lhs.write_expression(chunk, Some(dist), reserved_registers.clone())?;
         let dst = self.next_dst(dist, 1, &reserved_registers);
         
         
@@ -52,6 +50,8 @@ impl<'a> CodeGenerator<'a> for CallExpression<'a> {
             argument.write_expression(chunk, Some(dst), reserved_registers.clone())?;
             chunk.write_declare_local(dst, argument.line_number() as i32);
         }
+        chunk.write_call_stack_push(dist, self.lhs.line_number() as i32);
+        self.lhs.write_expression(chunk, Some(dist), reserved_registers.clone())?;
         
         chunk.write_fn_call(dist, self.arguments.len() as u8, self.lhs.line_number() as i32);
         

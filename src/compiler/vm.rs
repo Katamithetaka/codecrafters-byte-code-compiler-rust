@@ -10,16 +10,19 @@ use crate::{
     expressions::{EvaluateError, EvaluateErrorDetails, Value},
 };
 
-const STACK_MAX_SIZE: u8 = 255;
+const STACK_MAX_SIZE: u32 = u16::MAX as u32;
 const REGISTER_MAX_SIZE: usize = 256;
 const FN_CALL_OFFSET: u8 = 4;
+const DEBUG_TRACE_EXECUTION: bool = false;
 type Registers = [Value<String>; REGISTER_MAX_SIZE];
 
 #[derive(Debug)]
 pub struct CallFrame {
     pub return_ip: usize,
     pub register_base: u8,
-    pub stack_index: u8
+    pub stack_index: u16,
+    pub stack_state_index: usize
+    
 }
 
 
@@ -28,9 +31,9 @@ pub struct Vm {
     pub ip: usize,
     pub registers: Registers,
     pub global_variables: HashMap<String, Value<String>>,
-    pub stack_states: Vec<u8>,
+    pub stack_states: Vec<u16>,
     pub stack: [Value<String>; STACK_MAX_SIZE as usize],
-    pub stack_index: u16,
+    pub stack_index: u32,
     pub call_stack: Vec<CallFrame>
 }
 
@@ -39,7 +42,7 @@ impl Vm {
         self.call_stack.last().map(|c| c.register_base).unwrap_or(0) + register
     }
     
-    pub fn get_stack_index(&self, stack_index: u8) -> u8 {
+    pub fn get_stack_index(&self, stack_index: u16) -> u16 {
         self.call_stack.last().map(|c| c.stack_index).unwrap_or(0) + stack_index
     }
 }
@@ -257,11 +260,11 @@ pub fn execute_instruction(
             *variable = vm.registers[register as usize].clone();
         }
         Instructions::PushStack => {
-            vm.stack_states.push(vm.stack_index as u8);
+            vm.stack_states.push(vm.stack_index as u16);
         }
         Instructions::PopStack => {
             vm.stack_index = match vm.stack_states.pop() {
-                Some(previous_index) => previous_index as u16,
+                Some(previous_index) => previous_index as u32,
                 None => return Err(InterpretError::InvalidStackPop),
             };
         }
@@ -281,7 +284,8 @@ pub fn execute_instruction(
                 None => return Err(InterpretError::StackOverflow),
             };
 
-            if (vm.stack_index as u8) >= STACK_MAX_SIZE {
+            if (vm.stack_index) >= STACK_MAX_SIZE {
+                dbg!(vm.stack_index);
                 return Err(InterpretError::StackOverflow);
             }
         }
@@ -289,8 +293,8 @@ pub fn execute_instruction(
             let output_register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
 
-            let index = chunk.code[vm.ip];
-            vm.ip += 1;
+            let index = u16::from_be_bytes([chunk.code[vm.ip], chunk.code[vm.ip+1]]);
+            vm.ip += 2;
 
  
 
@@ -314,8 +318,8 @@ pub fn execute_instruction(
             vm.ip += 1;
 
 
-            let index = chunk.code[vm.ip];
-            vm.ip += 1;
+            let index = u16::from_be_bytes([chunk.code[vm.ip], chunk.code[vm.ip+1]]);
+            vm.ip += 2;
                 
             let index = vm.get_stack_index(index) as usize;
             
@@ -357,6 +361,8 @@ pub fn execute_instruction(
             vm.call_stack.last().ok_or(EvaluateErrorDetails::CallStackEmpty)?;
             let last = vm.call_stack.len() - 1;
             vm.call_stack[last].return_ip = vm.ip;
+            vm.call_stack[last].stack_index = vm.stack_index as u16 - num_args as u16;
+            
             match (reg.as_function(), reg.as_global_function()) {
                 (Ok(_), Ok(_)) => unreachable!(),
                 (Ok(f), Err(_)) => {
@@ -372,7 +378,7 @@ pub fn execute_instruction(
                     }
                     let args_start = vm.call_stack.last().ok_or(EvaluateErrorDetails::CallStackEmpty)?.stack_index;
                     
-                    let old: Vec<_> = if args_start < vm.stack_index as u8 {
+                    let old: Vec<_> = if args_start < vm.stack_index as u16 {
                         let slice = &mut vm.stack[args_start as usize .. vm.stack_index as usize];
                         slice.iter_mut().map(std::mem::take).collect()
                     } else {
@@ -384,7 +390,9 @@ pub fn execute_instruction(
                     let v = vm.call_stack.pop().ok_or(EvaluateErrorDetails::InvalidReturnStatement)?;
                     vm.ip = v.return_ip;
                     vm.registers[v.register_base as usize] = return_val;
-                    vm.stack_states.truncate(v.stack_index as usize);
+                    vm.stack_index = v.stack_index as u32;
+                        
+                    vm.stack_states.truncate(v.stack_state_index as usize);
                 },
                 (Err(e), Err(_)) => return Err(e),
             };
@@ -394,21 +402,22 @@ pub fn execute_instruction(
             let v = vm.call_stack.pop().ok_or(EvaluateErrorDetails::InvalidReturnStatement)?;
             vm.ip = v.return_ip;
             vm.registers[v.register_base as usize] = return_val;
-            vm.stack_states.truncate(v.stack_index as usize);
+            vm.stack_index = v.stack_index as u32;
+                
+            vm.stack_states.truncate(dbg!(v.stack_state_index) as usize);
             
         },
         Instructions::PushCallStack => {
             let register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
-            vm.call_stack.push(CallFrame { return_ip: vm.ip + FN_CALL_OFFSET as usize, register_base: register, stack_index: vm.stack_states.len() as u8 });
-            vm.stack_states.push(vm.stack_index as u8);
+            vm.call_stack.push(CallFrame { return_ip: vm.ip + FN_CALL_OFFSET as usize, register_base: register, stack_index: vm.stack_index as u16, stack_state_index: vm.stack_states.len() });
+            vm.stack_states.push(vm.stack_index as u16);
         }
     }
 
     Ok(())
 }
 
-const DEBUG_TRACE_EXECUTION: bool = true;
 pub fn interpret(chunk: &Chunk) -> Result<(), EvaluateError> {
     let mut vm = Vm::new();
     let mut previous_ip = 0;

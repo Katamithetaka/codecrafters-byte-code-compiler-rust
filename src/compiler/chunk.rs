@@ -136,16 +136,24 @@ impl<'a> Chunk<'a> {
         self.write(value_register as u8, line);
     }
 
-    pub fn write_get_local(&mut self, output_register: u8, slot: u8, line: i32) {
+    pub fn write_get_local(&mut self, output_register: u8, slot: u16, line: i32) {
         self.write_instruction(Instructions::GetLocal, line);
         self.write(output_register as u8, line);
-        self.write(slot as u8, line);
+        
+        let slot: [u8; 2] = slot.to_be_bytes(); // IT IS NOW DECIDED THAT WE USE BIG ENDIAN LMAO
+        
+        self.write(slot[0] as u8, line);
+        self.write(slot[1] as u8, line);
+        
     }
 
-    pub fn write_set_local(&mut self, input_register: u8, slot: u8, line: i32) {
+    pub fn write_set_local(&mut self, input_register: u8, slot: u16, line: i32) {
         self.write_instruction(Instructions::SetLocal, line);
         self.write(input_register as u8, line);
-        self.write(slot as u8, line);
+        let slot: [u8; 2] = slot.to_be_bytes(); // IT IS NOW DECIDED THAT WE USE BIG ENDIAN LMAO
+        
+        self.write(slot[0] as u8, line);
+        self.write(slot[1] as u8, line);
     }
 
     pub fn write_set_global(&mut self, ident: Varint, value_register: u8, line: i32) -> usize {

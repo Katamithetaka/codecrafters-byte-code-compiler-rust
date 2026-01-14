@@ -85,8 +85,8 @@ pub fn binary_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     return offset + 4;
 }
 
-pub fn stack_access(chunk: &Chunk, offset: usize) -> (u8, usize) {
-    return (chunk.code[offset], 1);
+pub fn stack_access(chunk: &Chunk, offset: usize) -> (u16, usize) {
+    return (u16::from_be_bytes([chunk.code[offset], chunk.code[offset+1]]), 2);
 }
 
 pub fn stack_access_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {

@@ -7,7 +7,7 @@ use crate::{
     },
     scanner::{Keyword, TokenKind},
     statements::{
-        Statements, block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement, print_statement::PrintStatement, while_statements::WhileStatement
+        Statements, block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement, print_statement::PrintStatement, return_statement::ReturnStatement, while_statements::WhileStatement
     },
 };
 
@@ -318,6 +318,18 @@ impl<'a> AstParser<'a> {
         let statement = PrintStatement::new(expr);
         Ok(statement)
     }
+    
+    pub fn return_statement(&mut self) -> Result<ReturnStatement<'a>, ParserError> {
+        let expr = if self.token_kind() != TokenKind::Semicolon {
+            let expr = self.expression()?;
+            Some(expr)
+        } else {
+            None
+        };
+        self.consume(TokenKind::Semicolon)?;
+        let statement = ReturnStatement::new(expr, self.line_number());
+        Ok(statement)
+    }
 
     pub fn expr_statement(&mut self) -> Result<ExprStatement<'a>, ParserError> {
         let expr = self.expression()?;
@@ -369,7 +381,6 @@ impl<'a> AstParser<'a> {
     }
 
     pub fn declaration(&mut self) -> Result<Statements<'a>, ParserError> {
-        dbg!(self.token_kind());
         
         match self.token_kind() {
             TokenKind::Keyword(Keyword::Var) => {
@@ -484,6 +495,10 @@ impl<'a> AstParser<'a> {
             TokenKind::Keyword(Keyword::For) => {
                 self.advance();
                 Ok(self.for_statement()?.into())
+            }
+            TokenKind::Keyword(Keyword::Return) => {
+                self.advance();
+                Ok(self.return_statement()?.into())
             }
             TokenKind::LeftBrace => {
                 self.advance();
