@@ -1,5 +1,7 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{
-    compiler::CodeGenerator,
+    compiler::{CodeGenerator, compiler::Compiler},
     expressions::{EvaluateError, EvaluateErrorDetails, Expression, Expressions},
     statements::{Statement, Statements},
 };
@@ -27,20 +29,28 @@ impl<'a> Statement<'a> for WhileStatement<'a> {}
 impl<'a> CodeGenerator<'a> for WhileStatement<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut crate::compiler::chunk::Chunk<'a>,
+        chunk: Rc<RefCell<Compiler<'a>>>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
         let dst = self.dst_or_default(dst_register, &reserved_registers);
-        let loop_offset = chunk.code.len();
+        let loop_offset = {
+            let chunk = chunk.borrow();
+            chunk.chunk.code.len()
+        };
         self.expression
-            .write_expression(chunk, Some(dst), reserved_registers.clone())?;
+            .write_expression(chunk.clone(), Some(dst), reserved_registers.clone())?;
 
-        let offset =
-            chunk.write_jump_if_false_placeholder(dst, self.expression.line_number() as i32);
+        let offset = {
+            let mut chunk = chunk.borrow_mut();
+
+            chunk.write_jump_if_false_placeholder(dst, self.expression.line_number() as i32)
+        };
 
         self.statement
-            .write_expression(chunk, Some(dst), reserved_registers.clone())?;
+            .write_expression(chunk.clone(), Some(dst), reserved_registers.clone())?;
+        let mut chunk = chunk.borrow_mut();
+
         chunk.write_goto(loop_offset as u16, self.expression.line_number() as i32);
 
         match chunk.update_jump(offset) {

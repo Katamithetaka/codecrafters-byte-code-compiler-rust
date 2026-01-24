@@ -1,7 +1,7 @@
-use std::fmt::Display;
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
-    compiler::{CodeGenerator, chunk::Chunk, instructions::Instructions},
+    compiler::{CodeGenerator, compiler::Compiler, instructions::Instructions},
     expressions::{Expression, Expressions},
 };
 
@@ -58,7 +58,7 @@ impl<'a> Expression<'a> for RelationalExpression<'a> {
 impl<'a> CodeGenerator<'a> for RelationalExpression<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut Chunk<'a>,
+        chunk: Rc<RefCell<Compiler<'a>>>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {

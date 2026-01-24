@@ -1,7 +1,7 @@
-use std::fmt::Display;
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
-    compiler::{CodeGenerator, chunk::Chunk},
+    compiler::{CodeGenerator, compiler::Compiler},
     expressions::{Expression, Expressions},
 };
 
@@ -31,11 +31,11 @@ impl<'a> Expression<'a> for Group<'a> {
 impl<'a> CodeGenerator<'a> for Group<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut Chunk<'a>,
+        compiler: Rc<RefCell<Compiler<'a>>>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
         self.expr
-            .write_expression(chunk, dst_register, reserved_registers)
+            .write_expression(compiler, dst_register, reserved_registers)
     }
 }

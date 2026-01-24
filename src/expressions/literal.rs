@@ -1,8 +1,8 @@
-use std::fmt::Display;
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
     Token,
-    compiler::{CodeGenerator, chunk::Chunk},
+    compiler::{CodeGenerator,  compiler::Compiler},
     expressions::{Expression, Value},
     scanner::{Keyword, TokenKind, TokenValue},
 };
@@ -40,10 +40,11 @@ impl<'a> Expression<'a> for Literal<'a> {
 impl<'a> CodeGenerator<'a> for Literal<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut Chunk<'a>,
+        chunk: Rc<RefCell<Compiler<'a>>>,
         dst_register: Option<u8>,
         _reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
+        let mut chunk = chunk.borrow_mut();
         let constant = match self.token.token {
             TokenKind::Number => match self.token.value {
                 TokenValue::Number(v) => {

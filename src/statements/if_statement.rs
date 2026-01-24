@@ -1,5 +1,7 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{
-    compiler::CodeGenerator,
+    compiler::{CodeGenerator, compiler::Compiler},
     expressions::{EvaluateError, EvaluateErrorDetails, Expressions, Value},
     statements::{Statement, Statements},
 };
@@ -22,7 +24,7 @@ impl<'a> Statement<'a> for IfStatement<'a> {}
 impl<'a> CodeGenerator<'a> for IfStatement<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut crate::compiler::chunk::Chunk<'a>,
+        chunk: Rc<RefCell<Compiler<'a>>>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
@@ -32,17 +34,20 @@ impl<'a> CodeGenerator<'a> for IfStatement<'a> {
         for (expr, statement, line) in self.statements.iter_mut() {
             match expr {
                 Some(expr) => {
-                    expr.write_expression(chunk, Some(dst), reserved_registers.clone())?
+                    expr.write_expression(chunk.clone(), Some(dst), reserved_registers.clone())?
                 }
                 None => {
+                    let mut chunk = chunk.borrow_mut();
                     let constant = chunk.get_or_write_constant(Value::Boolean(true), *line as i32);
                     chunk.write_load(dst, constant, *line as i32);
                 }
             };
 
-            let offset = chunk.write_jump_if_false_placeholder(dst, *line as i32);
 
-            statement.write_expression(chunk, Some(dst), reserved_registers.clone())?;
+            let offset = chunk.borrow_mut().write_jump_if_false_placeholder(dst, *line as i32);
+
+            statement.write_expression(chunk.clone(), Some(dst), reserved_registers.clone())?;
+            let mut chunk = chunk.borrow_mut();
             jmps.push((chunk.write_jump_placeholder(*line as i32), *line));
             match chunk.update_jump(offset) {
                 Ok(_) => {}
@@ -54,6 +59,7 @@ impl<'a> CodeGenerator<'a> for IfStatement<'a> {
                 }
             }
         }
+        let mut chunk = chunk.borrow_mut();
 
         for i in jmps {
             match chunk.update_jump(i.0) {

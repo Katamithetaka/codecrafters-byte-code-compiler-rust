@@ -24,7 +24,7 @@ pub struct CallFrame {
     pub register_base: u8,
     pub stack_index: u16,
     pub stack_state_index: usize
-    
+
 }
 
 
@@ -41,11 +41,11 @@ pub struct Vm {
 
 impl Vm {
     pub fn get_register(&self, register: u8) -> u8 {
-        self.call_stack.last().map(|c| c.register_base).unwrap_or(0) + register
+        register
     }
-    
+
     pub fn get_stack_index(&self, stack_index: u16) -> u16 {
-        self.call_stack.last().map(|c| c.stack_index).unwrap_or(0) + stack_index
+        stack_index
     }
 }
 
@@ -298,15 +298,15 @@ pub fn execute_instruction(
             let index = u16::from_be_bytes([chunk.code[vm.ip], chunk.code[vm.ip+1]]);
             vm.ip += 2;
 
- 
+
 
 
             let index = vm.get_stack_index(index) as usize;
-            
+
             if DEBUG_TRACE_EXECUTION {
                 eprintln!("Getting local {}",  index);
             }
-            
+
             if index >= vm.stack_index as usize {
                 return Err(EvaluateErrorDetails::UndefinedVariable(format!(
                     "Stack {index}: Index is too high",
@@ -322,13 +322,13 @@ pub fn execute_instruction(
 
             let index = u16::from_be_bytes([chunk.code[vm.ip], chunk.code[vm.ip+1]]);
             vm.ip += 2;
-                
+
             let index = vm.get_stack_index(index) as usize;
-            
+
             if DEBUG_TRACE_EXECUTION {
                 eprintln!("Getting local {index}");
             }
-            
+
             if index >= vm.stack_index as usize {
                 return Err(EvaluateErrorDetails::UndefinedVariable(format!(
                     "Stack {index}: Index is too high",
@@ -354,54 +354,62 @@ pub fn execute_instruction(
             vm.ip = jmp_addr as usize;
         }
         Instructions::FunctionCall => {
-
             let fn_register = vm.get_register(chunk.code[vm.ip]);
             vm.ip += 1;
-            
-            vm.call_stack.push(CallFrame { return_ip: vm.ip + 3 as usize, register_base: fn_register, stack_index: vm.stack_index as u16, stack_state_index: vm.stack_states.len() });
-            vm.stack_states.push(vm.stack_index as u16);
-            
+
             let num_args = chunk.code[vm.ip];
             vm.ip += 1;
-            let reg = &vm.registers[fn_register as usize];
-            vm.call_stack.last().ok_or(EvaluateErrorDetails::CallStackEmpty)?;
-            let last = vm.call_stack.len() - 1;
-            vm.call_stack[last].return_ip = vm.ip;
-            vm.call_stack[last].stack_index = vm.stack_index as u16 - num_args as u16;
-            
-            match (reg.as_function(), reg.as_global_function()) {
-                (Ok(_), Ok(_)) => unreachable!(),
-                (Ok(f), Err(_)) => {
-                    if f.arguments_count() != num_args {
-                        return Err(EvaluateErrorDetails::InvalidArgCount);
-                    }   
-                    
-                    vm.ip = f.begin() as usize;
-                },
-                (Err(_), Ok(g_f)) => {
-                    if g_f.arguments_count != num_args {
+
+            let func_val = &vm.registers[fn_register as usize];
+
+            match func_val {
+
+                // Value::Closure(c) => {
+                //     if c.function.arity() != num_args as u8 {
+                //         return Err(EvaluateErrorDetails::InvalidArgCount);
+                //     }
+
+                //     // Push a call frame
+                //     vm.call_stack.push(CallFrame {
+                //         closure: c.clone(),
+                //         return_ip: vm.ip,
+                //         register_base: fn_register,
+                //         stack_index: vm.stack_index as u16 - num_args as u16,
+                //         stack_state_index: vm.stack_states.len() as u16,
+                //     });
+
+                //     vm.stack_states.push(vm.stack_index as u16);
+
+                //     // switch to closure's chunk
+                //     vm.current_chunk = c.chunk.clone();
+                //     vm.ip = c.function.begin() as usize;
+                // }
+
+
+                Value::GlobalFunction(gf) => {
+                    if gf.arguments_count != num_args {
                         return Err(EvaluateErrorDetails::InvalidArgCount);
                     }
-                    let args_start = vm.call_stack.last().ok_or(EvaluateErrorDetails::CallStackEmpty)?.stack_index;
-                    
-                    let old: Vec<_> = if args_start < vm.stack_index as u16 {
-                        let slice = &mut vm.stack[args_start as usize .. vm.stack_index as usize];
+
+                    // collect arguments from the stack
+                    let args_start = vm.stack_index as usize - num_args as usize;
+                    let args: Vec<_> = if args_start < vm.stack_index as usize {
+                        let slice = &mut vm.stack[args_start..vm.stack_index as usize];
                         slice.iter_mut().map(std::mem::take).collect()
-                    } else {
-                        vec![]
-                    };
-                    
-                    let return_val = (g_f.callable)(old);
-                    
-                    let v = vm.call_stack.pop().ok_or(EvaluateErrorDetails::InvalidReturnStatement)?;
-                    vm.ip = v.return_ip;
-                    vm.registers[v.register_base as usize] = return_val;
-                    vm.stack_index = v.stack_index as u32;
-                        
-                    vm.stack_states.truncate(v.stack_state_index as usize);
-                },
-                (Err(e), Err(_)) => return Err(e),
-            };
+                    } else { vec![] };
+
+                    // call the Rust-native function
+                    let return_val = (gf.callable)(args);
+
+                    // store result in the function register
+                    vm.registers[fn_register as usize] = return_val;
+
+                    // reset stack index after popping args
+                    vm.stack_index -= num_args as u32;
+                }
+
+                _ => return Err(EvaluateErrorDetails::ExpectedFunction),
+            }
         },
         Instructions::FunctionReturn => {
             let return_val = std::mem::take(&mut vm.registers[vm.get_register(0) as usize]);
@@ -409,15 +417,15 @@ pub fn execute_instruction(
             vm.ip = v.return_ip;
             vm.registers[v.register_base as usize] = return_val;
             vm.stack_index = v.stack_index as u32;
-                
+
             vm.stack_states.truncate(v.stack_state_index as usize);
-            
+
         },
-        Instructions::DebugBreak => {       
+        Instructions::DebugBreak => {
             for (i, v) in vm.registers.iter().enumerate().filter(|(_, i)| !i.is_null()) {
                 println!("r{i} = {v}");
             }
-            
+
             std::io::stdin().read_line(&mut String::new()).map_err(|_| EvaluateErrorDetails::StdinFailed)?;
         }
 
@@ -463,4 +471,3 @@ pub fn interpret(chunk: &Chunk) -> Result<(), EvaluateError> {
     let mut vm = Box::new(Vm::new());
     interpret_with_vm(&mut vm, chunk)
 }
-

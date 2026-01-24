@@ -40,18 +40,15 @@ fn main() {
     let mut parser = AstParser::new(&tokens);
     let statements = parser.parse().expect("Failed to parse");
 
-    // Step 3: Resolve variable scopes
-    let mut resolver = Resolver::new();
-    let resolved_statements = resolver.resolve_statements(statements).expect("Failed to resolve");
 
-    // Step 4: Compile the resolved AST into bytecode
+    // Step 3: Compile the resolved AST into bytecode
     let mut chunk = Chunk::new();
     register_global_functions(&mut chunk);
     for mut statement in resolved_statements {
         statement.write_expression(&mut chunk, None, vec![]).expect("Failed to compile");
     }
 
-    // Step 5: Interpret the bytecode
+    // Step 4: Interpret the bytecode
     let result = interpret(&chunk).expect("Failed to interpret");
     println!("Result: {:?}", result);
 }
@@ -84,10 +81,11 @@ For more details, refer to the documentation of individual modules and types.
 mod ast_parser;
 pub mod compiler;
 pub mod expressions;
-pub mod resolver;
+
 mod scanner;
 pub mod statements;
 pub mod global_functions;
+pub mod value;
 
 pub use ast_parser::prelude::*;
 pub use scanner::prelude::*;
@@ -98,7 +96,6 @@ pub mod prelude {
     pub use crate::compiler::chunk::Chunk;
     pub use crate::compiler::CodeGenerator;
     pub use crate::expressions::prelude::*;
-    pub use crate::resolver::prelude::*;
     pub use crate::statements::prelude::*;
     pub use crate::global_functions::prelude::*;
 }

@@ -1,8 +1,10 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{
-    compiler::CodeGenerator,
+    compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}},
     expressions::{
         Expressions, Value,
-        identifier::{Identifier, IdentifierKind},
+        identifier::Identifier,
     },
     statements::Statement,
 };
@@ -22,32 +24,35 @@ impl<'a> Statement<'a> for DeclareStatement<'a> {}
 impl<'a> CodeGenerator<'a> for DeclareStatement<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut crate::compiler::chunk::Chunk<'a>,
+        chunk: Rc<RefCell<Compiler<'a>>>,
         dst: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
         let dist = self.dst_or_default(dst, &reserved_registers);
 
+
+
+        chunk.borrow_mut().declare_variable(self.ident.token, self.ident.line as i32);
+
         if let Some(expr) = &mut self.expr {
-            expr.write_expression(chunk, Some(dist), reserved_registers)?;
+            expr.write_expression(chunk.clone(), Some(dist), reserved_registers)?;
         } else {
-            let constant = chunk.get_or_write_constant(Value::Null, self.ident.line as i32);
-            chunk.write_load(dist, constant, self.ident.line as i32);
-        }
-        match self.ident.kind {
-            IdentifierKind::GlobalScope => {
-                let constant = chunk
-                    .get_or_write_constant(Value::String(self.ident.token), self.ident.line as i32);
+            let constant = chunk.borrow_mut().get_or_write_constant(Value::Null, self.ident.line as i32);
+            chunk.borrow_mut().write_load(dist, constant, self.ident.line as i32);
+        };
 
-                chunk.write_declare_global(constant, dist, self.ident.line as i32);
-
-                Ok(())
-            }
-            IdentifierKind::LocalScope { .. } => {
+        let mut chunk = chunk.borrow_mut();
+        match chunk.resolve_variable(self.ident.token)? {
+            ResolvedVar::Local(_) => {
                 chunk.write_declare_local(dist, self.ident.line as i32);
-                Ok(())
-            }
-            IdentifierKind::UpperScope { .. } => panic!("tried to declare a upper scope identifier?"),
+
+            },
+            ResolvedVar::Global(varint) => {
+                chunk.write_declare_global(varint, dist, self.ident.line as i32);
+            },
+            ResolvedVar::Upvalue(_) => unreachable!(),
         }
+
+        Ok(())
     }
 }

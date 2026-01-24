@@ -1,10 +1,11 @@
 #![allow(unused_variables)]
 use interpreter::compiler::CodeGenerator;
-use interpreter::compiler::chunk::Chunk;
+use interpreter::compiler::compiler::Compiler;
 use interpreter::compiler::instructions::Instructions;
 use interpreter::compiler::vm::interpret;
 use interpreter::global_functions::register_global_functions;
-use interpreter::resolver::Resolver;
+use interpreter::prelude::EvaluateError;
+use interpreter::prelude::EvaluateErrorDetails;
 use interpreter::*;
 use std::env;
 use std::fs;
@@ -114,19 +115,19 @@ fn main() {
                 }
             };
 
-            let mut chunk = Chunk::new();
+            let chunk = Compiler::new();
 
-            match v.write_expression(&mut chunk, Some(0), vec![]) {
+            match v.write_expression(chunk.clone(), Some(0), vec![]) {
                 Ok(_) => {}
                 Err(err) => {
                     eprintln!("{err}");
                     std::process::exit(70)
                 }
             }
-            chunk.write_print(0, 123);
-            chunk.write_instruction(Instructions::Return, 123);
-            chunk.disassemble("eval chunk");
-            match interpret(&chunk) {
+            chunk.borrow_mut().write_print(0, 123);
+            chunk.borrow_mut().write_instruction(Instructions::Return, 123);
+            chunk.borrow_mut().disassemble("eval chunk");
+            match interpret(&chunk.borrow().chunk) {
                 Ok(()) => {}
                 Err(err) => {
                     eprintln!("{err}");
@@ -154,13 +155,10 @@ fn main() {
                 }
             };
 
-            let mut resolver = Resolver::new();
 
             let mut parser = AstParser::new(&tokens);
             let v = parser
-                .parse()
-                .map(|tokens| resolver.resolve_statements(tokens))
-                .flatten();
+                .parse();
 
             let v = match v {
                 Ok(ok) => ok,
@@ -170,21 +168,25 @@ fn main() {
                 }
             };
 
-            let mut chunk = Chunk::new();
-            register_global_functions(&mut chunk);
+            let chunk = Compiler::new();
+            register_global_functions(&mut chunk.borrow_mut());
             for mut expr in v {
-                match expr.write_expression(&mut chunk, None, vec![]) {
+                match expr.write_expression(chunk.clone(), None, vec![]) {
                     Ok(_) => {}
+                    Err(EvaluateError { error: EvaluateErrorDetails::ParserError(e), ..}) => {
+                        eprintln!("Parser error: {e}");
+                        std::process::exit(65)
+                    }
                     Err(err) => {
                         eprintln!("{err}");
                         std::process::exit(70)
                     }
                 }
             }
-            chunk.write_instruction(Instructions::Return, 123);
-            chunk.disassemble("eval chunk");
+            chunk.borrow_mut().write_instruction(Instructions::Return, 123);
+            chunk.borrow_mut().disassemble("eval chunk");
             eprintln!("~eval chunk");
-            match interpret(&chunk) {
+            match interpret(&chunk.borrow().chunk) {
                 Ok(()) => {}
                 Err(err) => {
                     eprintln!("{err}");
@@ -198,4 +200,3 @@ fn main() {
         }
     }
 }
-

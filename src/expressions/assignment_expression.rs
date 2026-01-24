@@ -1,10 +1,10 @@
-use std::fmt::Display;
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
-    compiler::CodeGenerator,
+    compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}},
     expressions::{
-        Expression, Expressions, Value,
-        identifier::{Identifier, IdentifierKind},
+        Expression, Expressions,
+        identifier::Identifier,
     },
 };
 
@@ -40,27 +40,24 @@ impl<'a> Expression<'a> for AssignmentExpression<'a> {
 impl<'a> CodeGenerator<'a> for AssignmentExpression<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut crate::compiler::chunk::Chunk<'a>,
+        chunk: Rc<RefCell<Compiler<'a>>>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
         let dist = self.dst_or_default(dst_register, &reserved_registers);
         self.rhs
-            .write_expression(chunk, Some(dist), reserved_registers)?;
-        match self.lhs.kind {
-            IdentifierKind::GlobalScope => {
-                let constant = chunk
-                    .get_or_write_constant(Value::String(self.lhs.token), self.lhs.line as i32);
-
-                chunk.write_set_global(constant, dist, self.lhs.line as i32);
-            }
-            IdentifierKind::LocalScope { slot} => {
-                chunk.write_set_local(dist, slot, self.lhs.line as i32);
-            }
-            IdentifierKind::UpperScope { .. } => {
-                todo!();
-                // chunk.write_set_local(dist, slot, self.lhs.line as i32);
-            }
+            .write_expression(chunk.clone(), Some(dist), reserved_registers)?;
+        let mut chunk = chunk.borrow_mut();
+        match chunk.resolve_variable(self.lhs.token)? {
+            ResolvedVar::Local(i) => {
+                chunk.write_set_local(dist, i, self.line_number as i32);
+            },
+            ResolvedVar::Upvalue(slot) => {
+                chunk.write_set_upvalue(dist, slot, self.line_number as i32);
+            },
+            ResolvedVar::Global(varint) => {
+                chunk.write_set_global(varint, dist, self.line_number as i32);
+            },
         }
         Ok(())
     }

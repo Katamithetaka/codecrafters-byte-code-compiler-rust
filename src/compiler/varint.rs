@@ -1,4 +1,4 @@
-use crate::compiler::chunk::Chunk;
+use crate::{compiler::compiler::Compiler, prelude::Chunk};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Varint(pub u32);
@@ -6,7 +6,7 @@ pub struct Varint(pub u32);
 impl Varint {
     /// Writes a u32 as a varint (1–4 bytes).
     /// Returns the number of bytes written.
-    pub fn write_bytes(&self, chunk: &mut Chunk, line: i32) -> usize {
+    pub fn write_bytes(&self, chunk: &mut Compiler, line: i32) -> usize {
         let mut written = 0;
         let mut value = self.0;
         loop {

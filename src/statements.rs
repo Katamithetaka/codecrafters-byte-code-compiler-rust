@@ -1,10 +1,10 @@
 /// This module defines various statement types and traits used in the interpreter.
 /// Statements represent executable units of code in the language being interpreted.
 
-use std::fmt::Debug;
+use std::{cell::RefCell, fmt::Debug, rc::Rc};
 
 use crate::{
-    compiler::CodeGenerator,
+    compiler::{CodeGenerator, compiler::Compiler},
     statements::{
         block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement, print_statement::PrintStatement, return_statement::ReturnStatement, while_statements::WhileStatement
     },
@@ -21,7 +21,7 @@ pub mod function_declaration_statement;
 pub mod return_statement;
 
 /// A trait representing a generic statement in the interpreter.
-/// 
+///
 /// Statements are executable units of code, such as variable declarations,
 /// loops, or function calls. Implementors of this trait must also implement
 /// the `CodeGenerator` trait to allow for code generation.
@@ -60,7 +60,7 @@ pub enum Statements<'a> {
     /// A return statement, which exits a function and optionally returns a value.
     ReturnStatement(ReturnStatement<'a>),
 }
-    
+
 
 impl Statements<'_> {
     /// Checks if the statement is a return statement.
@@ -81,7 +81,7 @@ impl<'a> Statement<'a> for Statements<'a> {}
 impl<'a> CodeGenerator<'a> for Statements<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut crate::compiler::chunk::Chunk<'a>,
+        chunk: Rc<RefCell<Compiler<'a>>>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {

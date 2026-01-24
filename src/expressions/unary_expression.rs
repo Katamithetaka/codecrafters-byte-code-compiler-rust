@@ -1,7 +1,7 @@
-use std::fmt::Display;
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
-    compiler::{CodeGenerator, chunk::Chunk, instructions::Instructions},
+    compiler::{CodeGenerator,  compiler::Compiler, instructions::Instructions},
     expressions::{Expression, Expressions},
 };
 
@@ -47,7 +47,7 @@ impl<'a> Expression<'a> for UnaryExpression<'a> {
 impl<'a> CodeGenerator<'a> for UnaryExpression<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut Chunk<'a>,
+        chunk: Rc<RefCell<Compiler<'a>>>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
@@ -57,7 +57,7 @@ impl<'a> CodeGenerator<'a> for UnaryExpression<'a> {
         };
 
         self.rhs
-            .write_expression(chunk, Some(my_dst_register), reserved_registers)?;
+            .write_expression(chunk.clone(), Some(my_dst_register), reserved_registers)?;
 
         let dst = match dst_register {
             Some(dst) => dst,
@@ -65,13 +65,13 @@ impl<'a> CodeGenerator<'a> for UnaryExpression<'a> {
         };
 
         match self.op {
-            UnaryOp::Bang => chunk.write_unary(
+            UnaryOp::Bang => chunk.borrow_mut().write_unary(
                 Instructions::Bang,
                 my_dst_register,
                 dst,
                 self.line_number() as i32,
             ),
-            UnaryOp::Minus => chunk.write_unary(
+            UnaryOp::Minus => chunk.borrow_mut().write_unary(
                 Instructions::Negate,
                 my_dst_register,
                 dst,

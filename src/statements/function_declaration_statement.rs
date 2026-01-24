@@ -1,8 +1,10 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{
-    compiler::{CodeGenerator, instructions::Instructions},
+    compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}},
     expressions::{
-        EvaluateError, EvaluateErrorDetails, Function, Value,
-        identifier::{Identifier, IdentifierKind},
+        Function, Value,
+        identifier::Identifier,
     },
     statements::{Statement, Statements},
 };
@@ -31,79 +33,79 @@ impl<'a> Statement<'a> for FunctionDeclareStatement<'a> {}
 impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut crate::compiler::chunk::Chunk<'a>,
+        compiler: Rc<RefCell<Compiler<'a>>>,
         dst: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
-        let dist = self.dst_or_default(dst, &reserved_registers);
+        let dst_reg = self.dst_or_default(dst, &reserved_registers);
+        let mut chunk = compiler.borrow_mut();
 
-        match self.ident.kind {
-            IdentifierKind::GlobalScope => {
-                let constant = chunk
-                    .get_or_write_constant(Value::String(self.ident.token), self.ident.line as i32);
+        // Declare the function name in the parent scope
+        chunk.declare_variable(self.ident.token, self.ident.line as i32);
 
-                chunk.write_declare_global(constant, dist, self.ident.line as i32);
-            }
-            IdentifierKind::LocalScope { .. } => {
-                chunk.write_declare_local(dist, self.ident.line as i32);
-            }
-            IdentifierKind::UpperScope { .. } => panic!("tried to declare a upper scope identifier?"),
-        };
+        match chunk.resolve_variable(self.ident.token)? {
+            ResolvedVar::Local(_) => {
+                chunk.write_declare_local(dst_reg, self.ident.line as i32);
+            },
+            ResolvedVar::Global(varint) => {
+                chunk.write_declare_global(varint, dst_reg, self.ident.line as i32);
+            },
+            ResolvedVar::Upvalue(_) => unreachable!(),
+        }
 
-        let offset = chunk.write_jump_placeholder(self.ident.line as i32);
-        let code_begin = chunk.code.len();
+        drop(chunk);
 
+        // Create a new nested compiler for the function body
+        let fn_compiler = Compiler::with_parent(Rc::clone(&compiler));
+
+        // Add parameters as locals in the nested compiler
+        for arg in &self.args {
+            let mut fn_compiler = fn_compiler.borrow_mut();
+            fn_compiler.declare_variable(arg.token, self.ident.line as i32);
+            fn_compiler.locals.last_mut().unwrap().depth = fn_compiler.scope_depth;
+        }
+
+        // Compile the function body in the nested compiler
         let mut wrote_return = false;
         for statement in &mut self.statements {
-            statement.write_expression(chunk, Some(0), vec![])?; // this means that if there is a return statement it'll automatically be in register 0
-            
+            statement.write_expression(fn_compiler.clone(), Some(0), vec![])?;
+
             if statement.is_return() {
-                chunk.write_function_return(self.ident.line as i32);
+                let mut fn_compiler = fn_compiler.borrow_mut();
+                fn_compiler.write_function_return(self.ident.line as i32);
                 wrote_return = true;
                 break;
             }
         }
-        
+
         if !wrote_return {
-            let constant = chunk.get_or_write_constant(Value::Null, self.ident.line as i32);
-            chunk.write_load(0, constant, self.ident.line as i32);
-            
-            
-            chunk.write_function_return(self.ident.line as i32);
+            let mut fn_compiler = fn_compiler.borrow_mut();
+            let null_const = fn_compiler.get_or_write_constant(Value::Null, self.ident.line as i32);
+            fn_compiler.write_load(0, null_const, self.ident.line as i32);
+            fn_compiler.write_function_return(self.ident.line as i32);
         }
 
-        match chunk.update_jump(offset) {
-            Ok(_) => {
-                let function = Function::new(
-                    self.ident.token.to_string(),
-                    code_begin as u16,
-                    self.args.len() as u8,
-                );
+        // Create the function object (with its upvalue count)
+        let function = Function::new(
+            self.ident.token.to_string(),
+            self.args.len() as u8,
+        );
 
-                let constant = chunk.add_constant(Value::Function(function));
-                chunk.write_load(dist, constant, self.ident.line as i32);
-                match self.ident.kind {
-                    IdentifierKind::GlobalScope => {
-                        let constant = chunk.get_or_write_constant(
-                            Value::String(self.ident.token),
-                            self.ident.line as i32,
-                        );
+        let mut compiler = compiler.borrow_mut();
+        let constant = compiler.add_constant(Value::Function(function));
 
-                        chunk.write_set_global(constant, dist, self.ident.line as i32);
-                    }
-                    IdentifierKind::LocalScope { slot } => {
-                        chunk.write_set_local(dist, slot, self.ident.line as i32);
-                    }
-                    IdentifierKind::UpperScope { .. } => panic!("tried to declare a upper scope identifier?"),
-                };
-                Ok(())
-            }
-            Err(_) => {
-                return Err(EvaluateError {
-                    error: EvaluateErrorDetails::CodeTooLong,
-                    line: self.ident.line,
-                });
-            }
+        compiler.write_load(dst_reg, constant, self.ident.line as i32);
+
+
+        // compiler.write_closure(dst_reg, constant, &fn_compiler.upvalues, self.ident.line as i32);
+
+        // Assign the function to the declared variable
+        match compiler.resolve_variable(self.ident.token)? {
+            ResolvedVar::Local(slot) => compiler.write_set_local(dst_reg, slot, self.ident.line as i32),
+            ResolvedVar::Global(varint) => compiler.write_set_global(varint, dst_reg, self.ident.line as i32),
+            ResolvedVar::Upvalue(_) => unreachable!(),
         }
+
+        Ok(())
     }
 }

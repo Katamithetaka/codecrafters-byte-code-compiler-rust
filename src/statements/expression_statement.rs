@@ -1,4 +1,6 @@
-use crate::{compiler::CodeGenerator, expressions::Expressions, statements::Statement};
+use std::{cell::RefCell, rc::Rc};
+
+use crate::{compiler::{CodeGenerator, compiler::Compiler}, expressions::Expressions, statements::Statement};
 
 #[derive(Debug)]
 pub struct ExprStatement<'a> {
@@ -14,7 +16,7 @@ impl<'a> Statement<'a> for ExprStatement<'a> {}
 impl<'a> CodeGenerator<'a> for ExprStatement<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut crate::compiler::chunk::Chunk<'a>,
+        chunk: Rc<RefCell<Compiler<'a>>>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {

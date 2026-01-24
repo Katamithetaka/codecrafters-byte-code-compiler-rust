@@ -1,10 +1,15 @@
-use crate::compiler::chunk::Chunk;
+use std::{cell::RefCell, rc::Rc};
+
+use crate::compiler::{compiler::Compiler};
 
 pub mod chunk;
 pub mod instructions;
 pub mod value;
 pub mod varint;
 pub mod vm;
+pub mod compiler;
+
+
 
 /// The binary format version used by the compiler.
 /// This constant defines the version of the binary format that the compiler generates.
@@ -29,7 +34,7 @@ pub trait CodeGenerator<'a> {
     /// A `Result` indicating success or an `EvaluateError`.
     fn write_expression(
         &mut self,
-        chunk: &mut Chunk<'a>,
+        chunk: Rc<RefCell<Compiler<'a>>>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> Result;
@@ -47,7 +52,7 @@ pub trait CodeGenerator<'a> {
     fn dst_or_default(&self, dst: Option<u8>, reserved_registers: &[u8]) -> u8 {
         dst.unwrap_or(reserved_registers.iter().max().copied().unwrap_or(0) + 1)
     }
-    
+
     /// Calculates the next destination register based on the current destination and an offset.
     ///
     /// # Arguments
@@ -80,10 +85,10 @@ pub mod macros {
                 let my_dst_register_1 = (reserved_1.iter().max().copied().unwrap_or(0) + 1);
 
                 $self.lhs
-                    .write_expression($chunk, Some(my_dst_register_0), reserved_0)?;
+                    .write_expression($chunk.clone(), Some(my_dst_register_0), reserved_0)?;
 
                 $self.rhs
-                    .write_expression($chunk, Some(my_dst_register_1), reserved_1)?;
+                    .write_expression($chunk.clone(), Some(my_dst_register_1), reserved_1)?;
 
                 let dst = match $dst_register {
                     Some(dst) => dst,
@@ -92,7 +97,7 @@ pub mod macros {
                 let r0 = my_dst_register_0;
                 let r1 = my_dst_register_1;
 
-                $chunk.write_binary($instruction, r0, r1, dst, $self.line_number() as i32);
+                $chunk.borrow_mut().write_binary($instruction, r0, r1, dst, $self.line_number() as i32);
                 Ok(())
             }
         };

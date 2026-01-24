@@ -1,7 +1,7 @@
-use std::fmt::Display;
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
-    compiler::{CodeGenerator, chunk::Chunk, instructions::Instructions},
+    compiler::{CodeGenerator, compiler::Compiler, instructions::Instructions},
     expressions::{EvaluateError, EvaluateErrorDetails, Expression, Expressions},
 };
 
@@ -54,7 +54,7 @@ impl<'a> Expression<'a> for LogicalExpression<'a> {
 impl<'a> CodeGenerator<'a> for LogicalExpression<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut Chunk<'a>,
+        chunk: Rc<RefCell<Compiler<'a>>>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
@@ -62,8 +62,9 @@ impl<'a> CodeGenerator<'a> for LogicalExpression<'a> {
         let boolean_dst = match self.op {
             LogicalOp::Or => {
                 self.lhs
-                    .write_expression(chunk, Some(dst), reserved_registers.clone())?;
-                chunk.write_unary(
+                    .write_expression(chunk.clone(), Some(dst), reserved_registers.clone())?;
+
+                chunk.borrow_mut().write_unary(
                     Instructions::Bang,
                     dst,
                     self.next_dst(dst, 1, &reserved_registers),
@@ -73,18 +74,20 @@ impl<'a> CodeGenerator<'a> for LogicalExpression<'a> {
             }
             LogicalOp::And => {
                 self.lhs
-                    .write_expression(chunk, Some(dst), reserved_registers.clone())?;
+                    .write_expression(chunk.clone(), Some(dst), reserved_registers.clone())?;
 
                 dst
             }
         };
+
+
         let offset =
-            chunk.write_jump_if_false_placeholder(boolean_dst, self.lhs.line_number() as i32);
+            chunk.borrow_mut().write_jump_if_false_placeholder(boolean_dst, self.lhs.line_number() as i32);
 
         self.rhs
-            .write_expression(chunk, Some(dst), reserved_registers.clone())?;
+            .write_expression(chunk.clone(), Some(dst), reserved_registers.clone())?;
 
-        match chunk.update_jump(offset) {
+        match chunk.borrow_mut().update_jump(offset) {
             Ok(_) => Ok(()),
             Err(_) => Err(EvaluateError {
                 error: EvaluateErrorDetails::CodeTooLong,

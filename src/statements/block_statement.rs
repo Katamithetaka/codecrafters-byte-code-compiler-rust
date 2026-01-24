@@ -1,5 +1,7 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{
-    compiler::CodeGenerator,
+    compiler::{CodeGenerator, compiler::Compiler},
     statements::{Statement, Statements},
 };
 
@@ -29,15 +31,15 @@ impl<'a> Statement<'a> for BlockStatement<'a> {}
 impl<'a> CodeGenerator<'a> for BlockStatement<'a> {
     fn write_expression(
         &mut self,
-        chunk: &mut crate::compiler::chunk::Chunk<'a>,
+        chunk: Rc<RefCell<Compiler<'a>>>,
         dst_register: Option<u8>,
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
-        chunk.write_stack_push(self.begin_line as i32);
+        chunk.borrow_mut().write_stack_push(self.begin_line as i32);
         for i in &mut self.statements {
-            i.write_expression(chunk, dst_register, reserved_registers.clone())?;
+            i.write_expression(chunk.clone(), dst_register, reserved_registers.clone())?;
         }
-        chunk.write_stack_pop(self.end_line as i32);
+        chunk.borrow_mut().write_stack_pop(self.end_line as i32);
 
         Ok(())
     }

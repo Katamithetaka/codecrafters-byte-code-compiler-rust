@@ -3,7 +3,7 @@
 
 use std::rc::Rc;
 
-use crate::{compiler::chunk::Chunk, expressions::{GlobalFunction, Value}};
+use crate::{compiler::{compiler::Compiler}, expressions::{GlobalFunction, Value}};
 
 pub mod clock;
 
@@ -53,12 +53,12 @@ macro_rules! global_mods {
 /// ```
 /// use interpreter::global_functions::register_global_functions;
 /// use interpreter::compiler::chunk::Chunk;
-/// 
+///
 /// let mut chunk = Chunk::new();
 /// register_global_functions(&mut chunk);
 /// ```
-pub fn register_global_functions(chunk: &mut Chunk) {
-    
+pub fn register_global_functions(chunk: &mut Compiler) {
+
     let functions = global_mods!(clock);
 
     for func in functions {
