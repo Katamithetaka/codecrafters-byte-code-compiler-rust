@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    compiler::{CodeGenerator, compiler::Compiler},
+    compiler::{CodeGenerator, compiler::{Compiler}},
     statements::{Statement, Statements},
 };
 
@@ -36,6 +36,15 @@ impl<'a> CodeGenerator<'a> for BlockStatement<'a> {
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
         chunk.borrow_mut().write_stack_push(self.begin_line as i32);
+
+        for statement in  &mut self.statements {
+            if let Statements::FunctionDeclareStatement(func) = statement {
+                chunk.borrow_mut().declare_function(func.ident.token, func.ident.line as i32);
+                chunk.borrow_mut().write_declare_local(0, func.ident.line as i32);
+
+            }
+        }
+
         for i in &mut self.statements {
             i.write_expression(chunk.clone(), dst_register, reserved_registers.clone())?;
         }

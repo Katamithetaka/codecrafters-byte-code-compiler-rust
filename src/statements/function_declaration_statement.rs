@@ -41,11 +41,10 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
         let mut chunk = compiler.borrow_mut();
 
         // Declare the function name in the parent scope
-        chunk.declare_variable(self.ident.token, self.ident.line as i32);
+        chunk.declare_function(self.ident.token, self.ident.line as i32);
 
         match chunk.resolve_variable(self.ident.token)? {
             ResolvedVar::Local(_) => {
-                chunk.write_declare_local(dst_reg, self.ident.line as i32);
             },
             ResolvedVar::Global(varint) => {
                 chunk.write_declare_global(varint, dst_reg, self.ident.line as i32);
@@ -64,9 +63,19 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
             fn_compiler.declare_variable(arg.token, self.ident.line as i32);
             fn_compiler.locals.last_mut().unwrap().depth = fn_compiler.scope_depth;
         }
-
         // Compile the function body in the nested compiler
         let mut wrote_return = false;
+
+        for statement in  &mut self.statements {
+            if let Statements::FunctionDeclareStatement(func) = statement {
+                let mut fn_compiler = fn_compiler.borrow_mut();
+
+                fn_compiler.declare_function(func.ident.token, func.ident.line as i32);
+                fn_compiler.write_declare_local(0, func.ident.line as i32);
+
+            }
+        }
+
         for statement in &mut self.statements {
             statement.write_expression(fn_compiler.clone(), Some(0), vec![])?;
 
@@ -89,15 +98,15 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
         let function = Function::new(
             self.ident.token.to_string(),
             self.args.len() as u8,
+            Rc::new(fn_compiler.borrow().chunk.clone().into())
         );
 
         let mut compiler = compiler.borrow_mut();
         let constant = compiler.add_constant(Value::Function(function));
 
-        compiler.write_load(dst_reg, constant, self.ident.line as i32);
 
 
-        // compiler.write_closure(dst_reg, constant, &fn_compiler.upvalues, self.ident.line as i32);
+        compiler.write_closure(dst_reg, constant, &fn_compiler.borrow().upvalues, self.ident.line as i32);
 
         // Assign the function to the declared variable
         match compiler.resolve_variable(self.ident.token)? {

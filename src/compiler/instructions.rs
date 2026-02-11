@@ -1,3 +1,5 @@
+use std::fmt::{Display, format};
+
 use crate::compiler::{chunk::Chunk, value::print_value, varint::Varint};
 
 #[repr(u8)]
@@ -32,6 +34,9 @@ pub enum Instructions {
     FunctionCall = 26,
     FunctionReturn = 27,
     DebugBreak = 28,
+    Closure = 29,
+    GetUpvalue = 30,
+    SetUpvalue = 31,
 }
 
 pub fn simple_instruction(name: &str, offset: usize) -> usize {
@@ -39,12 +44,12 @@ pub fn simple_instruction(name: &str, offset: usize) -> usize {
     return offset + 1;
 }
 
-pub fn print_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+pub fn print_instruction<T>(name: &str, chunk: &Chunk<T>, offset: usize) -> usize {
     eprintln!("{name:15} r{}", chunk.code[offset + 1]);
     return offset + 2;
 }
 
-pub fn constant_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+pub fn constant_instruction<T: Display>(name: &str, chunk: &Chunk<T>, offset: usize) -> usize {
     let (constant, o) = Varint::read_bytes(chunk, offset + 1);
     eprint!("{name:15} c{constant} ");
     print_value(&chunk.constants[constant as usize]);
@@ -52,7 +57,7 @@ pub fn constant_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     return offset + o + 1;
 }
 
-pub fn constant_register_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+pub fn constant_register_instruction<T: Display>(name: &str, chunk: &Chunk<T>, offset: usize) -> usize {
     let (constant, o) = Varint::read_bytes(chunk, offset + 2);
 
     eprint!("{name:15} r{} c{} ", chunk.code[offset + 1], constant);
@@ -61,12 +66,12 @@ pub fn constant_register_instruction(name: &str, chunk: &Chunk, offset: usize) -
     return offset + 2 + o;
 }
 
-pub fn single_register_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+pub fn single_register_instruction<T>(name: &str, chunk: &Chunk<T>, offset: usize) -> usize {
     eprintln!("{name:15} r{}", chunk.code[offset + 1],);
     return offset + 2;
 }
 
-pub fn unary_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+pub fn unary_instruction<T>(name: &str, chunk: &Chunk<T>, offset: usize) -> usize {
     eprintln!(
         "{name:15} r{} r{}",
         chunk.code[offset + 1],
@@ -75,7 +80,7 @@ pub fn unary_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     return offset + 3;
 }
 
-pub fn binary_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+pub fn binary_instruction<T>(name: &str, chunk: &Chunk<T>, offset: usize) -> usize {
     eprintln!(
         "{name:15} r{} r{} r{}",
         chunk.code[offset + 1],
@@ -85,11 +90,11 @@ pub fn binary_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     return offset + 4;
 }
 
-pub fn stack_access(chunk: &Chunk, offset: usize) -> (u16, usize) {
+pub fn stack_access<T>(chunk: &Chunk<T>, offset: usize) -> (u16, usize) {
     return (u16::from_be_bytes([chunk.code[offset], chunk.code[offset+1]]), 2);
 }
 
-pub fn stack_access_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+pub fn stack_access_instruction<T>(name: &str, chunk: &Chunk<T>, offset: usize) -> usize {
     let register = chunk.code[offset + 1];
     let (index, o) = stack_access(chunk, offset + 2);
 
@@ -98,7 +103,7 @@ pub fn stack_access_instruction(name: &str, chunk: &Chunk, offset: usize) -> usi
     return offset + o + 2;
 }
 
-pub fn jmp_if_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+pub fn jmp_if_instruction<T>(name: &str, chunk: &Chunk<T>, offset: usize) -> usize {
     let register = chunk.code[offset + 1];
     let jmp_addr = u16::from_be_bytes([chunk.code[offset + 2], chunk.code[offset + 3]]);
     eprintln!("{name:15} r{} addr[{}]", register, jmp_addr);
@@ -106,7 +111,7 @@ pub fn jmp_if_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     return offset + 4;
 }
 
-pub fn jmp_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+pub fn jmp_instruction<T>(name: &str, chunk: &Chunk<T>, offset: usize) -> usize {
     let jmp_addr = u16::from_be_bytes([chunk.code[offset + 1], chunk.code[offset + 2]]);
     eprintln!("{name:15} addr[{}]", jmp_addr);
 
@@ -114,7 +119,7 @@ pub fn jmp_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
 }
 
 
-pub fn fn_call_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+pub fn fn_call_instruction<T>(name: &str, chunk: &Chunk<T>, offset: usize) -> usize {
     let fn_register = chunk.code[offset + 1];
     let num_args = chunk.code[offset + 2];
     eprintln!("{name:15} r{fn_register} args: {num_args}");
@@ -122,8 +127,38 @@ pub fn fn_call_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     return offset + 3;
 }
 
+pub fn closure_instruction<T: Display>(name: &str, chunk: &Chunk<T>, mut offset: usize) -> usize {
+    offset += 1;
+    let fn_register = chunk.code[offset];
+    offset += 1;
+    let (constant, bytes_read) = Varint::read_bytes(chunk, offset);
+    offset += bytes_read;
+    let upvalues_count = chunk.code[offset];
+    offset += 1;
+    let mut final_string = format!("{name:15} r{fn_register} c{constant} {} (upvalues count: {upvalues_count})", chunk.constants[constant as usize]);
+    for _ in 0..(upvalues_count as usize)  {
+        let is_local = chunk.code[offset] != 0;
+        offset += 1;
+        let index = u16::from_be_bytes([chunk.code[offset], chunk.code[offset + 1]]);
 
-pub fn disassemble_instruction(chunk: &Chunk, offset: usize, previous_offset: usize) -> usize {
+        offset += 2;
+
+        final_string += &format!("\n\tupvalue (local: {is_local}, index: {index})");
+    }
+
+    eprintln!("{}", final_string);
+    let f = chunk.constants[constant as usize].as_function().unwrap();
+
+    eprintln!("");
+    f.chunk().disassemble(&format!("== {} ==", f.name()));
+    eprintln!("== ~{} ==", f.name());
+    eprintln!("");
+
+    return offset;
+}
+
+
+pub fn disassemble_instruction<T: Display>(chunk: &Chunk<T>, offset: usize, previous_offset: usize) -> usize {
     eprint!("{offset:04}");
     if offset > 0 && chunk.get_line(offset) == chunk.get_line(previous_offset) {
         eprint!("   | ");
@@ -164,7 +199,9 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize, previous_offset: us
         Some(Instructions::FunctionCall) => fn_call_instruction("OP_FN_CALL", chunk, offset),
         Some(Instructions::FunctionReturn) => simple_instruction("OP_FN_RT", offset),
         Some(Instructions::DebugBreak) => simple_instruction("OP_DEBUG_BREAK", offset),
-
+        Some(Instructions::Closure) => closure_instruction("OP_CLOSURE", chunk, offset),
+        Some(Instructions::GetUpvalue) => stack_access_instruction("OP_U_GET", chunk, offset),
+        Some(Instructions::SetUpvalue) => stack_access_instruction("OP_U_SET", chunk, offset),
         None => offset + 1,
     }
 }

@@ -3,6 +3,7 @@ use std::{cell::RefCell, num::TryFromIntError, rc::Rc};
 use crate::{ParserError, compiler::{instructions::{Instructions, disassemble_instruction}, varint::Varint}, expressions::Value, prelude::Chunk};
 
 #[allow(unused)]
+#[derive(Debug)]
 pub struct Local {
     pub name: String,
     pub depth: i32,
@@ -18,7 +19,7 @@ pub struct UpvalueDesc {
 
 #[allow(unused)]
 pub struct Compiler<'a> {
-    pub chunk: Chunk<'a>,
+    pub chunk: Chunk<&'a str>,
 
     pub locals: Vec<Local>,
     pub upvalues: Vec<UpvalueDesc>,
@@ -53,13 +54,7 @@ impl<'a> Compiler<'a> {
             enclosing: Some(compiler),
         };
 
-        // Reserve slot 0 for function return value (like Crafting Interpreters)
-        // This slot can also be used as the default destination register for returns
-        compiler.locals.push(Local {
-            name: "".to_string(), // empty name for "slot 0"
-            depth: 0,
-            is_captured: false,
-        });
+
 
         Rc::new(RefCell::new(compiler))
     }
@@ -153,6 +148,20 @@ impl<'a> Compiler<'a> {
                 .get_or_write_constant(Value::String(name), line);
 
         } else {
+
+            self.locals.push(Local { name: name.to_string(), depth: self.scope_depth, is_captured: false, });
+        }
+    }
+
+    pub fn declare_function(&mut self, name: &'a str, line: i32)  {
+        if self.scope_depth == 0 && !self.enclosing.is_some() {
+            self
+                .get_or_write_constant(Value::String(name), line);
+
+        } else {
+            if self.locals.iter().any(|f| f.name == name.to_string()) {
+                return;
+            }
             self.locals.push(Local { name: name.to_string(), depth: self.scope_depth, is_captured: false, });
         }
     }
@@ -183,14 +192,19 @@ impl<'a> Compiler<'a> {
     }
 
     pub fn write_get_upvalue(&mut self, output_register: u8, slot: u16, line: i32) {
-        self.write_instruction(Instructions::GetLocal, line);
+        self.write_instruction(Instructions::GetUpvalue, line);  // ← Fix this
         self.write(output_register as u8, line);
-
-        let slot: [u8; 2] = slot.to_be_bytes(); // IT IS NOW DECIDED THAT WE USE BIG ENDIAN LMAO
-
+        let slot: [u8; 2] = slot.to_be_bytes();
         self.write(slot[0] as u8, line);
         self.write(slot[1] as u8, line);
+    }
 
+    pub fn write_set_upvalue(&mut self, input_register: u8, slot: u16, line: i32) {
+        self.write_instruction(Instructions::SetUpvalue, line);  // ← Fix this
+        self.write(input_register as u8, line);
+        let slot: [u8; 2] = slot.to_be_bytes();
+        self.write(slot[0] as u8, line);
+        self.write(slot[1] as u8, line);
     }
 
     pub fn write_set_local(&mut self, input_register: u8, slot: u16, line: i32) {
@@ -202,14 +216,7 @@ impl<'a> Compiler<'a> {
         self.write(slot[1] as u8, line);
     }
 
-    pub fn write_set_upvalue(&mut self, input_register: u8, slot: u16, line: i32) {
-        self.write_instruction(Instructions::SetLocal, line);
-        self.write(input_register as u8, line);
-        let slot: [u8; 2] = slot.to_be_bytes(); // IT IS NOW DECIDED THAT WE USE BIG ENDIAN LMAO
 
-        self.write(slot[0] as u8, line);
-        self.write(slot[1] as u8, line);
-    }
 
     pub fn write_set_global(&mut self, ident: Varint, value_register: u8, line: i32) {
         self.write_instruction(Instructions::SetGlobal, line);
@@ -346,5 +353,27 @@ impl<'a> Compiler<'a> {
         // otherwise, add new upvalue
         self.upvalues.push(UpvalueDesc { is_local, index });
         (self.upvalues.len() - 1) as u16
+    }
+
+    pub fn write_closure(&mut self, dst_reg: u8, constant: Varint, upvalues: &[UpvalueDesc], line: i32) {
+        self.write_instruction(Instructions::Closure, line);
+        self.write(dst_reg, line);
+
+        // Write the constant index as varint
+        constant.write_bytes(self, line);
+
+        // Write the number of upvalues
+        self.write(upvalues.len() as u8, line);
+
+        // Write each upvalue's metadata
+        for upvalue in upvalues {
+            // Write whether it's a local (1) or inherited from parent (0)
+            self.write(if upvalue.is_local { 1 } else { 0 }, line);
+
+            // Write the index as u16 (big endian to match your other code)
+            let index_bytes = upvalue.index.to_be_bytes();
+            self.write(index_bytes[0], line);
+            self.write(index_bytes[1], line);
+        }
     }
 }

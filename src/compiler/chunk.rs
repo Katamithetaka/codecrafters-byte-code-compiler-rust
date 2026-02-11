@@ -1,18 +1,20 @@
+use std::fmt::Display;
+
 use crate::{
     compiler::{
-        varint::Varint,
+        instructions::disassemble_instruction, varint::Varint
     },
     expressions::Value,
 };
 
-#[derive(Debug)]
-pub struct Chunk<'a> {
+#[derive(Debug, PartialEq, Clone)]
+pub struct Chunk<S> {
     pub code: Vec<u8>,
-    pub constants: Vec<Value<&'a str>>,
+    pub constants: Vec<Value<S>>,
     pub lines: Vec<(i32, usize)>,
 }
 
-impl<'a> Chunk<'a> {
+impl<S> Chunk<S> {
     pub fn new() -> Self {
         return Self {
             code: vec![],
@@ -21,14 +23,7 @@ impl<'a> Chunk<'a> {
         };
     }
 
-
-    pub fn get_constant(&mut self, value: &Value<&'a str>) -> Option<Varint> {
-        self.constants.iter().position(|e| e == value).map(|v| {
-            return Varint(v as u32);
-        })
-    }
-
-    pub fn add_constant(&mut self, value: Value<&'a str>) -> Varint {
+    pub fn add_constant(&mut self, value: Value<S>) -> Varint {
         self.constants.push(value);
         return Varint((self.constants.len() - 1) as u32);
     }
@@ -59,10 +54,40 @@ impl<'a> Chunk<'a> {
         }
         return self.lines[line_index].0;
     }
+
+    pub fn disassemble(&self, name: &str) where S: Display {
+        eprintln!("== {} ==", name);
+        let mut i = 0;
+        let mut previous = i;
+        while i < self.code.len() {
+            let tmp = i;
+            i = disassemble_instruction(self, i, previous);
+            previous = tmp;
+        }
+    }
 }
 
-impl Default for Chunk<'_> {
+impl<S: PartialEq> Chunk<S> {
+    pub fn get_constant(&mut self, value: &Value<S>) -> Option<Varint> {
+        self.constants.iter().position(|e| e == value).map(|v| {
+            return Varint(v as u32);
+        })
+    }
+}
+
+impl<S> Default for Chunk<S> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+
+impl Into<Chunk<String>> for Chunk<&str> {
+    fn into(self) -> Chunk<String> {
+        let Chunk { code, constants, lines } = self;
+        let constants = constants.into_iter().map(|v| v.into()).collect::<Vec<Value<String>>>();
+        Chunk {
+            code, constants, lines
+        }
     }
 }

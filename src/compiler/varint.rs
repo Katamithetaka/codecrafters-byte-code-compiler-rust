@@ -30,7 +30,7 @@ impl Varint {
 
     /// Reads a varint starting at `offset`.
     /// Returns (value, bytes_read).
-    pub fn read_bytes(chunk: &Chunk, offset: usize) -> (u32, usize) {
+    pub fn read_bytes<T>(chunk: &Chunk<T>, offset: usize) -> (u32, usize) {
         let mut result = 0u32;
         let mut shift = 0;
         let mut bytes_read = 0;

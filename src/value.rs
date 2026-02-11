@@ -1,23 +1,38 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use crate::prelude::EvaluateErrorDetails;
+use crate::prelude::{Chunk, EvaluateErrorDetails};
 
 
 /// Represents the internal details of a function, including its name, starting position, and argument count.
-#[derive(Clone, Debug, PartialEq)]
-pub struct FunctionInner {
+#[derive(Clone, Debug)]
+pub struct FunctionInner<T> {
     /// The name of the function.
     pub name: String,
 
     /// The number of arguments the function takes.
     pub arguments_count: u8,
+
+    pub chunk: Rc<Chunk<T>>
 }
 
 /// Represents a user-defined function in the interpreter.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     /// The internal details of the function.
-    inner: Rc<FunctionInner>
+    inner: Rc<FunctionInner<String>>
+}
+
+#[derive(Debug, Clone)]
+pub struct Closure<T> {
+    pub function: Function,           // function metadata (arity, code begin)
+    pub chunk: Rc<Chunk<T>>,         // bytecode for this function
+    pub upvalues: Vec<Value<T>>, // captured variables
+}
+
+impl<T> PartialEq for Closure<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.function == other.function
+    }
 }
 
 /// Represents a global function that can be called from anywhere in the program.
@@ -43,12 +58,19 @@ impl PartialEq for GlobalFunction {
     }
 }
 
+impl<T> PartialEq for FunctionInner<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name && self.arguments_count == other.arguments_count
+    }
+}
+
 impl Function {
-    pub fn new(name: String, arguments_count: u8) -> Self {
+    pub fn new(name: String, arguments_count: u8, chunk: Rc<Chunk<String>>) -> Self {
         Self {
             inner: Rc::new(FunctionInner {
                 name,
                 arguments_count,
+                chunk
             }),
         }
     }
@@ -61,6 +83,10 @@ impl Function {
 
     pub fn arguments_count(&self) -> u8 {
         return self.inner.arguments_count
+    }
+
+    pub fn chunk(&self) -> Rc<Chunk<String>> {
+        return self.inner.chunk.clone()
     }
 }
 
@@ -87,7 +113,8 @@ pub enum Value<S> {
     /// A global function.
     GlobalFunction(GlobalFunction),
     /// A reference-counted, mutable value.
-    Cell(Rc<RefCell<Value<S>>>)
+    Cell(Rc<RefCell<Value<S>>>),
+    Closure(Closure<S>)
 }
 
 impl<S: Display> Display for Value<S> {
@@ -100,6 +127,7 @@ impl<S: Display> Display for Value<S> {
             Value::Function(s) => write!(f, "{}", s),
             Value::GlobalFunction(s) => write!(f, "{}", s),
             Value::Cell(s) => write!(f, "{}", s.borrow()),
+            Value::Closure(closure) => write!(f, "{}", closure.function),
         }
     }
 }
@@ -133,6 +161,9 @@ impl<'a> From<Value<&'a str>> for Value<String> {
                 let new_inner = Rc::new(RefCell::new((*inner.borrow()).clone().into()));
                 Value::Cell(new_inner)
             },
+            Value::Closure(_) => {
+                panic!("Closures can't exist at compile time therefore this conversion shouldn't happen!")
+            }
         }
     }
 }
@@ -195,6 +226,43 @@ impl<S: ToString> Value<S> {
             Value::GlobalFunction(f) => Ok(f.clone()),
             Value::Cell(cell) => cell.borrow().as_global_function(), // recursive unwrap
             _ => Err(EvaluateErrorDetails::ExpectedFunction),
+        }
+    }
+}
+
+impl<S: Clone> Value<S> {
+    /// Upgrades a value to a Cell if it isn't already one, otherwise clones it.
+    /// This is useful for capturing values in closures that need shared mutability.
+    pub fn into_cell(self) -> Value<S> {
+        match self {
+            Value::Cell(cell) => Value::Cell(cell),
+            other => Value::Cell(Rc::new(RefCell::new(other))),
+        }
+    }
+
+    // Or if you want a version that works with references:
+    pub fn to_cell(&self) -> Value<S> {
+        match self {
+            Value::Cell(cell) => Value::Cell(cell.clone()),
+            other => Value::Cell(Rc::new(RefCell::new(other.clone()))),
+        }
+    }
+
+    pub fn set(&mut self, new_value: Value<S>) {
+        match self {
+            Value::Cell(cell) => {
+                *cell.borrow_mut() = new_value;
+            }
+            _ => {
+                *self = new_value;
+            }
+        }
+    }
+
+    pub fn inner(&self) -> Value<S> {
+        match self {
+            Value::Cell(cell) => cell.borrow().clone(),
+            _ => self.clone(),
         }
     }
 }

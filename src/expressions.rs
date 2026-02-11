@@ -109,6 +109,10 @@ pub enum EvaluateErrorDetails {
     /// Error for failing to fetch stdin during a debug break.
     #[error("Debug break couldn't fetch stdin")]
     StdinFailed,
+    #[error("Tried to access an upvalue when no call stack was available!")]
+    InvalidUpvalueAccess,
+    #[error("Upvalue was not a shared ptr!")]
+    InvalidUpvalueType,
 
     #[error("{0}")]
     ParserError( #[from] ParserError)

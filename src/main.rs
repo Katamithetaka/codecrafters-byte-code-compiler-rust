@@ -9,6 +9,7 @@ use interpreter::prelude::EvaluateErrorDetails;
 use interpreter::*;
 use std::env;
 use std::fs;
+use std::rc::Rc;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -124,10 +125,12 @@ fn main() {
                     std::process::exit(70)
                 }
             }
-            chunk.borrow_mut().write_print(0, 123);
-            chunk.borrow_mut().write_instruction(Instructions::Return, 123);
-            chunk.borrow_mut().disassemble("eval chunk");
-            match interpret(&chunk.borrow().chunk) {
+
+            let mut chunk = Rc::into_inner(chunk).unwrap().into_inner();
+            chunk.write_print(0, 123);
+            chunk.write_instruction(Instructions::Return, 123);
+            chunk.disassemble("eval chunk");
+            match interpret(Rc::new(chunk.chunk.into())) {
                 Ok(()) => {}
                 Err(err) => {
                     eprintln!("{err}");
@@ -183,10 +186,13 @@ fn main() {
                     }
                 }
             }
-            chunk.borrow_mut().write_instruction(Instructions::Return, 123);
-            chunk.borrow_mut().disassemble("eval chunk");
+
+            let mut chunk = Rc::into_inner(chunk).unwrap().into_inner();
+
+            chunk.write_instruction(Instructions::Return, 123);
+            chunk.disassemble("eval chunk");
             eprintln!("~eval chunk");
-            match interpret(&chunk.borrow().chunk) {
+            match interpret(Rc::new(chunk.chunk.into())) {
                 Ok(()) => {}
                 Err(err) => {
                     eprintln!("{err}");
