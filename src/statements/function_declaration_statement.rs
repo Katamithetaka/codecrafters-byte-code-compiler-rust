@@ -42,9 +42,11 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
 
         // Declare the function name in the parent scope
         chunk.declare_function(self.ident.token, self.ident.line as i32);
+        chunk.mark_declared(self.ident.token.to_string());
 
         match chunk.resolve_variable(self.ident.token)? {
             ResolvedVar::Local(_) => {
+
             },
             ResolvedVar::Global(varint) => {
                 chunk.write_declare_global(varint, dst_reg, self.ident.line as i32);
@@ -110,7 +112,9 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
 
         // Assign the function to the declared variable
         match compiler.resolve_variable(self.ident.token)? {
-            ResolvedVar::Local(slot) => compiler.write_set_local(dst_reg, slot, self.ident.line as i32),
+            ResolvedVar::Local(slot) => {
+                compiler.write_set_local(dst_reg, slot, self.ident.line as i32);
+            },
             ResolvedVar::Global(varint) => compiler.write_set_global(varint, dst_reg, self.ident.line as i32),
             ResolvedVar::Upvalue(_) => unreachable!(),
         }

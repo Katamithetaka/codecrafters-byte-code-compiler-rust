@@ -3,11 +3,12 @@ use std::{cell::RefCell, num::TryFromIntError, rc::Rc};
 use crate::{ParserError, compiler::{instructions::{Instructions, disassemble_instruction}, varint::Varint}, expressions::Value, prelude::Chunk};
 
 #[allow(unused)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Local {
     pub name: String,
     pub depth: i32,
     pub is_captured: bool,
+    pub is_predeclared: bool
 }
 
 #[allow(unused)]
@@ -26,6 +27,7 @@ pub struct Compiler<'a> {
 
     pub scope_depth: i32,
     enclosing: Option<Rc<RefCell<Compiler<'a>>>>,
+    globals: Option<Vec<String>>
 }
 
 pub enum ResolvedVar {
@@ -42,21 +44,37 @@ impl<'a> Compiler<'a> {
             upvalues: Vec::new(),
             scope_depth: 0,
             enclosing: None,
+            globals: Some(Vec::new())
         }))
     }
 
     pub fn with_parent(compiler: Rc<RefCell<Compiler<'a>>>) -> Rc<RefCell<Self>> {
-        let mut compiler = Compiler {
+        let compiler = Compiler {
             chunk: Chunk::new(),
             locals: Vec::new(),
             upvalues: Vec::new(),
             scope_depth: 0,
             enclosing: Some(compiler),
+            globals: None
         };
 
 
 
         Rc::new(RefCell::new(compiler))
+    }
+
+    fn add_global(&mut self, name: String) {
+        match &self.enclosing {
+            Some(enclosing) => enclosing.borrow_mut().add_global(name),
+            None => self.globals.as_mut().unwrap().push(name),
+        }
+    }
+
+    fn has_global(&self, name: &String) -> bool {
+        match &self.enclosing {
+            Some(enclosing) => enclosing.borrow().has_global(name),
+            None => self.globals.as_ref().unwrap().contains(&name),
+        }
     }
 
     pub fn get_constant(&mut self, value: &Value<&'a str>) -> Option<Varint> {
@@ -146,10 +164,10 @@ impl<'a> Compiler<'a> {
         if self.scope_depth == 0 && !self.enclosing.is_some() {
             self
                 .get_or_write_constant(Value::String(name), line);
-
+            self.add_global(name.to_string());
         } else {
 
-            self.locals.push(Local { name: name.to_string(), depth: self.scope_depth, is_captured: false, });
+            self.locals.push(Local { name: name.to_string(), depth: -1, is_captured: false, is_predeclared: false, });
         }
     }
 
@@ -157,12 +175,12 @@ impl<'a> Compiler<'a> {
         if self.scope_depth == 0 && !self.enclosing.is_some() {
             self
                 .get_or_write_constant(Value::String(name), line);
-
+            self.add_global(name.to_string());
         } else {
             if self.locals.iter().any(|f| f.name == name.to_string()) {
                 return;
             }
-            self.locals.push(Local { name: name.to_string(), depth: self.scope_depth, is_captured: false, });
+            self.locals.push(Local { name: name.to_string(), depth: self.scope_depth, is_captured: false, is_predeclared: true, });
         }
     }
 
@@ -175,7 +193,6 @@ impl<'a> Compiler<'a> {
     pub fn write_declare_local(&mut self, value_register: u8, line: i32) {
         let last = self.locals.last_mut().unwrap();
         last.depth = self.scope_depth;
-
         self.write_instruction(Instructions::DefineLocal, line);
         self.write(value_register as u8, line);
     }
@@ -292,12 +309,32 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    pub fn mark_declared(&mut self, name: String) {
+        match self.locals.iter_mut().find(|l| l.name == name) {
+            Some(v) => v.is_predeclared = false,
+            None => {},
+        }
+    }
+
     pub fn resolve_variable(&mut self, name: &'a str) -> Result<ResolvedVar, ParserError> {
-        if let Some(slot) = self.resolve_local(name)? {
+        if let Some((slot, _)) = self.resolve_local(name)? {
             return Ok(ResolvedVar::Local(slot));
         }
 
-        if let Some(up) = self.resolve_upvalue(name) {
+        if let Some(up) = self.resolve_full_upvalue(name) {
+            return Ok(ResolvedVar::Upvalue(up));
+        }
+
+        if self.has_global(&name.to_string()) {
+            let global = self.get_or_write_constant(
+                Value::String(name),
+                0,
+            );
+
+            return Ok(ResolvedVar::Global(global))
+        }
+
+        if let Some(up) = self.resolve_predeclared_upvalue(name) {
             return Ok(ResolvedVar::Upvalue(up));
         }
 
@@ -306,19 +343,28 @@ impl<'a> Compiler<'a> {
             0,
         );
 
-        Ok(ResolvedVar::Global(global))
+        return Ok(ResolvedVar::Global(global))
     }
 
-    fn resolve_upvalue(&mut self, name: &str) -> Option<u16> {
+    fn resolve_full_upvalue(&mut self, name: &str) -> Option<u16> {
         let mut enclosing = self.enclosing.as_mut()?.borrow_mut();
 
-        if let Some(slot) = enclosing.resolve_local(name).unwrap() {
+        if let Some((slot, local)) = enclosing.resolve_local(name).unwrap() {
+            if local.is_predeclared {
+                if let Some(up) = enclosing.resolve_full_upvalue(name) {
+                    drop(enclosing);
+                    return Some(self.add_upvalue(false, up));
+                }
+                else {
+                    return None;
+                }
+            }
             enclosing.locals[slot as usize].is_captured = true;
             drop(enclosing);
             return Some(self.add_upvalue(true, slot));
         }
 
-        if let Some(up) = enclosing.resolve_upvalue(name) {
+        if let Some(up) = enclosing.resolve_full_upvalue(name) {
             drop(enclosing);
             return Some(self.add_upvalue(false, up));
         }
@@ -326,10 +372,28 @@ impl<'a> Compiler<'a> {
         None
     }
 
-    fn resolve_local(&mut self, name: &str) -> Result<Option<u16>, ParserError> {
+    fn resolve_predeclared_upvalue(&mut self, name: &str) -> Option<u16> {
+        let mut enclosing = self.enclosing.as_mut()?.borrow_mut();
+
+        if let Some((slot, _)) = enclosing.resolve_local(name).unwrap() {
+
+            enclosing.locals[slot as usize].is_captured = true;
+            drop(enclosing);
+            return Some(self.add_upvalue(true, slot));
+        }
+
+        if let Some(up) = enclosing.resolve_full_upvalue(name) {
+            drop(enclosing);
+            return Some(self.add_upvalue(false, up));
+        }
+
+        None
+    }
+
+    fn resolve_local(&mut self, name: &str) -> Result<Option<(u16, Local)>, ParserError> {
         for (i, local) in self.locals.iter().enumerate().rev() {
             if local.name == name && local.depth != -1 {
-                return Ok(Some(i as u16));
+                return Ok(Some((i as u16, local.clone())));
             }
             if local.name == name && local.depth == -1 {
                 return Err(ParserError {

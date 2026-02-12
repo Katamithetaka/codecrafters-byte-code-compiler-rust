@@ -49,7 +49,7 @@ impl<'a> CodeGenerator<'a> for CallExpression<'a> {
 
         for argument in self.arguments.iter_mut() {
             argument.write_expression(chunk.clone(), Some(dst), reserved_registers.clone())?;
-            chunk.borrow_mut().locals.push(Local { name: "".to_string(), depth: 0, is_captured: false });
+            chunk.borrow_mut().locals.push(Local { name: "".to_string(), depth: 0, is_captured: false, is_predeclared: false });
             chunk.borrow_mut().write_declare_local(dst, argument.line_number() as i32);
         }
         chunk.borrow_mut().write_fn_call(dist, self.arguments.len() as u8, self.lhs.line_number() as i32);

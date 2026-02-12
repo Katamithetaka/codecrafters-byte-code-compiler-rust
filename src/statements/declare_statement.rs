@@ -42,15 +42,15 @@ impl<'a> CodeGenerator<'a> for DeclareStatement<'a> {
         };
 
         let mut chunk = chunk.borrow_mut();
-        match chunk.resolve_variable(self.ident.token)? {
-            ResolvedVar::Local(_) => {
+        match chunk.resolve_variable(self.ident.token) {
+            Ok(ResolvedVar::Local(_)) | Err(_) => {
                 chunk.write_declare_local(dist, self.ident.line as i32);
 
             },
-            ResolvedVar::Global(varint) => {
+            Ok(ResolvedVar::Global(varint)) => {
                 chunk.write_declare_global(varint, dist, self.ident.line as i32);
             },
-            ResolvedVar::Upvalue(_) => unreachable!(),
+            Ok(ResolvedVar::Upvalue(_)) => unreachable!(),
         }
 
         Ok(())
