@@ -64,7 +64,9 @@ pub enum ParserErrorDetails {
     #[error("Invalid assignment target")]
     InvalidAssignementTarget,
     #[error("Variable redeclaration")]
-    VariableRedeclaration
+    VariableRedeclaration,
+    #[error("Return statement in top-level code")]
+    InvalidReturnStatement
 }
 
 impl<'a> AstParser<'a> {

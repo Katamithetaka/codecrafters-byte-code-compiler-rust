@@ -26,7 +26,7 @@ pub struct Compiler<'a> {
     pub upvalues: Vec<UpvalueDesc>,
 
     pub scope_depth: i32,
-    enclosing: Option<Rc<RefCell<Compiler<'a>>>>,
+    pub enclosing: Option<Rc<RefCell<Compiler<'a>>>>,
     globals: Option<Vec<String>>
 }
 

@@ -1,9 +1,9 @@
 use std::{cell::RefCell, rc::Rc};
 
+use strum::ParseError;
+
 use crate::{
-    compiler::{CodeGenerator, compiler::Compiler},
-    expressions::{Expressions, Value},
-    statements::Statement,
+    ParserError, compiler::{CodeGenerator, compiler::Compiler}, expressions::{Expressions, Value}, statements::Statement
 };
 
 #[derive(Debug)]
@@ -26,6 +26,13 @@ impl<'a> CodeGenerator<'a> for ReturnStatement<'a> {
         reserved_registers: Vec<u8>,
     ) -> crate::compiler::Result {
         let dist = 0;
+
+        if let None = chunk.borrow().enclosing {
+            Err(ParserError {
+                error: crate::ast_parser::ParserErrorDetails::InvalidReturnStatement,
+                line: self.line_number,
+            })?
+        }
 
         if let Some(expr) = &mut self.expr {
             expr
