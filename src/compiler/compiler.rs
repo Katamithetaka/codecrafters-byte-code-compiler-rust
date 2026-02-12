@@ -160,15 +160,19 @@ impl<'a> Compiler<'a> {
         self.write(register_index as u8, line);
     }
 
-    pub fn declare_variable(&mut self, name: &'a str, line: i32)  {
+    pub fn declare_variable(&mut self, name: &'a str, line: i32) -> Result<(), ()> {
         if self.scope_depth == 0 && !self.enclosing.is_some() {
             self
                 .get_or_write_constant(Value::String(name), line);
             self.add_global(name.to_string());
         } else {
-
+            if self.locals.iter().any(|f| f.name == name.to_string() && f.depth == self.scope_depth) {
+                return Err(());
+            }
             self.locals.push(Local { name: name.to_string(), depth: -1, is_captured: false, is_predeclared: false, });
         }
+
+        Ok(())
     }
 
     pub fn declare_function(&mut self, name: &'a str, line: i32)  {

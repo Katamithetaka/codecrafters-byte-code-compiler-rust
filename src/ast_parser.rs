@@ -63,6 +63,8 @@ pub enum ParserErrorDetails {
     /// Error for an invalid assignment target.
     #[error("Invalid assignment target")]
     InvalidAssignementTarget,
+    #[error("Variable redeclaration")]
+    VariableRedeclaration
 }
 
 impl<'a> AstParser<'a> {
@@ -288,7 +290,7 @@ impl<'a> AstParser<'a> {
 
         Ok(unary)
     }
-    
+
     pub fn call(&mut self) -> Result<Expressions<'a>, ParserError> {
         let mut expr = self.primary()?;
         while self.token_kind() == TokenKind::LeftParen {
@@ -303,9 +305,9 @@ impl<'a> AstParser<'a> {
             self.consume(TokenKind::RightParen)?;
             expr = CallExpression::new(Box::new(expr), arguments).into();
         };
-        
+
         Ok(expr.into())
-        
+
     }
 
     pub fn unary(&mut self) -> Result<Expressions<'a>, ParserError> {
@@ -365,7 +367,7 @@ impl<'a> AstParser<'a> {
         let statement = PrintStatement::new(expr);
         Ok(statement)
     }
-    
+
     pub fn return_statement(&mut self) -> Result<ReturnStatement<'a>, ParserError> {
         let expr = if self.token_kind() != TokenKind::Semicolon {
             let expr = self.expression()?;
@@ -400,7 +402,7 @@ impl<'a> AstParser<'a> {
 
         return Ok(statement);
     }
-    
+
     pub fn function_declaration(&mut self) -> Result<Statements<'a>, ParserError> {
         let fun_name = self.identifier()?;
         self.consume(TokenKind::LeftParen)?;
@@ -412,23 +414,23 @@ impl<'a> AstParser<'a> {
             }
             self.advance();
         }
-        
+
         self.consume(TokenKind::RightParen)?;
-        
+
         let mut statements = vec![];
         self.consume(TokenKind::LeftBrace)?;
         while self.token_kind() != TokenKind::RightBrace {
             statements.push(self.declaration()?);
         }
         self.consume(TokenKind::RightBrace)?;
-        
+
         let statement = FunctionDeclareStatement::new(fun_name, args, statements);
-        
+
         return Ok(statement.into())
     }
 
     pub fn declaration(&mut self) -> Result<Statements<'a>, ParserError> {
-        
+
         match self.token_kind() {
             TokenKind::Keyword(Keyword::Var) => {
                 self.advance();
@@ -481,7 +483,7 @@ impl<'a> AstParser<'a> {
         let statement = self.statement()?;
         return Ok(WhileStatement::new(expression, Box::new(statement)).into());
     }
-    
+
     pub fn for_statement(&mut self) -> Result<Statements<'a>, ParserError> {
         self.consume(TokenKind::LeftParen)?;
         let begin_line = self.line_number();
@@ -499,7 +501,7 @@ impl<'a> AstParser<'a> {
             self.advance();
             None
         };
-        let test: Option<Expressions<'a>> = 
+        let test: Option<Expressions<'a>> =
             if self.token_kind() != TokenKind::Semicolon {
                 Some(self.expression()?.into())
             }
@@ -507,20 +509,20 @@ impl<'a> AstParser<'a> {
                 None
             };
         self.consume(TokenKind::Semicolon)?;
-        
-        let inc: Option<Expressions<'a>> = 
+
+        let inc: Option<Expressions<'a>> =
             if self.token_kind() != TokenKind::RightParen {
                 Some(self.expression()?.into())
             }
             else {
                 None
             };
-        
-        self.consume(TokenKind::RightParen)?;      
-        
+
+        self.consume(TokenKind::RightParen)?;
+
         let statement = Box::new(self.statement()?);
         let end_line = self.line_number();
-        
+
         return Ok(ForStatement::new(declaration, test, inc, statement, begin_line, end_line).into())
     }
 

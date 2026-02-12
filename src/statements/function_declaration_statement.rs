@@ -1,12 +1,10 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}},
-    expressions::{
+    ParserError, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}}, expressions::{
         Function, Value,
         identifier::Identifier,
-    },
-    statements::{Statement, Statements},
+    }, statements::{Statement, Statements}
 };
 
 #[derive(Debug)]
@@ -62,7 +60,15 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
         // Add parameters as locals in the nested compiler
         for arg in &self.args {
             let mut fn_compiler = fn_compiler.borrow_mut();
-            fn_compiler.declare_variable(arg.token, self.ident.line as i32);
+            match fn_compiler.declare_variable(arg.token, self.ident.line as i32) {
+                Ok(_) => {},
+                Err(_) => {
+                    Err(ParserError {
+                        error: crate::ast_parser::ParserErrorDetails::VariableRedeclaration,
+                        line: self.ident.line,
+                    })?
+                },
+            }
             fn_compiler.locals.last_mut().unwrap().depth = fn_compiler.scope_depth;
         }
         // Compile the function body in the nested compiler

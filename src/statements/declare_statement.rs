@@ -1,12 +1,10 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}},
-    expressions::{
+    ParserError, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}}, expressions::{
         Expressions, Value,
         identifier::Identifier,
-    },
-    statements::Statement,
+    }, statements::Statement
 };
 
 #[derive(Debug)]
@@ -32,7 +30,15 @@ impl<'a> CodeGenerator<'a> for DeclareStatement<'a> {
 
 
 
-        chunk.borrow_mut().declare_variable(self.ident.token, self.ident.line as i32);
+        match chunk.borrow_mut().declare_variable(self.ident.token, self.ident.line as i32) {
+            Ok(_) => {},
+            Err(_) => {
+                Err(ParserError {
+                    error: crate::ast_parser::ParserErrorDetails::VariableRedeclaration,
+                    line: self.ident.line,
+                })?
+            },
+        }
 
         if let Some(expr) = &mut self.expr {
             expr.write_expression(chunk.clone(), Some(dist), reserved_registers)?;

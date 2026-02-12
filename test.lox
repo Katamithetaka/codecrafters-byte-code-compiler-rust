@@ -1,19 +1,6 @@
-var count = 0;
-
 {
-  fun makeCounter() {
-    fun counter() {
-      count = count + 1;
-      print count;
-    }
-    return counter;
-  }
+   var a = "value";
 
-  var counter1 = makeCounter();
-  counter1();
-  counter1();
-
-  var count = 0;
-
-  counter1();
+   // Attempting to redeclare 'a' in the same scope
+   var a = "other"; // expect compile error
 }
