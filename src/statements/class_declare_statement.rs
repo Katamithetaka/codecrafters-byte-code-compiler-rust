@@ -43,7 +43,16 @@ impl<'a> CodeGenerator<'a> for ClassDeclareStatement<'a> {
             },
         }
 
-        let constant = chunk.add_constant(Value::Class(Class::new(self.ident.token.to_string())));
+        let constant = chunk.add_constant(Value::Null);
+
+        let class = Class::new(self.ident.token.to_string());
+
+        // todo: handle methods
+
+
+        chunk.chunk.constants[constant.0 as usize] = Value::Class(class);
+
+
         chunk.write_load(dst_reg, constant, self.ident.line as i32);
         match chunk.resolve_variable(self.ident.token) {
             Ok(ResolvedVar::Local(_)) | Err(_) => {

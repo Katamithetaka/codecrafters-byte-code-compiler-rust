@@ -1,12 +1,14 @@
 use std::{fmt::Display, rc::Rc};
 
-use crate::value::class;
+use crate::{compiler::{compiler::Compiler, varint::Varint}, value::{Closure, class}};
 
 /// Represents the internal details of a function, including its name, starting position, and argument count.
 #[derive(Clone, Debug)]
 pub struct ClassInner {
     /// The name of the function.
     pub name: String,
+
+    pub constructor: Option<Closure<String>>
 }
 
 /// Represents a user-defined function in the interpreter.
@@ -29,9 +31,17 @@ impl Display for Class {
 }
 
 impl Class {
+
     pub fn new(name: String) -> Self {
         Self {
-            inner: Rc::new(ClassInner { name }),
+            inner: Rc::new(ClassInner {
+                name,
+                constructor: None
+            }),
         }
+    }
+
+    pub fn name(&self) -> String {
+        self.inner.name.clone()
     }
 }

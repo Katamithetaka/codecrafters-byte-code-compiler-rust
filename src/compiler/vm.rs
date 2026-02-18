@@ -7,7 +7,7 @@ use crate::{
         value::print_value,
         varint::Varint,
     },
-    expressions::{EvaluateError, EvaluateErrorDetails}, value::Closure,
+    expressions::{EvaluateError, EvaluateErrorDetails}, value::{Closure, class, class_instance::ClassInstance},
 };
 
 
@@ -375,28 +375,34 @@ pub fn execute_instruction(
 
             let func_val = &vm.registers[fn_register as usize].inner();
 
+            let mut call_closure = |c: &Closure<String>| {
+                if c.function.arguments_count() != num_args as u8 {
+                    return Err(EvaluateErrorDetails::InvalidArgCount);
+                }
+
+                // Push a call frame
+                vm.call_stack.push(CallFrame {
+                    chunk: vm.current_chunk.clone(),
+                    closure: c.clone(),
+                    return_ip: vm.ip,
+                    register_base: fn_register,
+                    stack_index: vm.stack_index as u16 - num_args as u16,
+                    stack_state_index: vm.stack_states.len()
+                });
+
+                vm.stack_states.push(vm.stack_index as u16);
+
+                // switch to closure's chunk
+                vm.current_chunk = c.chunk.clone();
+                vm.ip = 0;
+
+                return Ok(())
+            };
+
             match func_val {
 
                 Value::Closure(c) => {
-                    if c.function.arguments_count() != num_args as u8 {
-                        return Err(EvaluateErrorDetails::InvalidArgCount);
-                    }
-
-                    // Push a call frame
-                    vm.call_stack.push(CallFrame {
-                        chunk: vm.current_chunk.clone(),
-                        closure: c.clone(),
-                        return_ip: vm.ip,
-                        register_base: fn_register,
-                        stack_index: vm.stack_index as u16 - num_args as u16,
-                        stack_state_index: vm.stack_states.len()
-                    });
-
-                    vm.stack_states.push(vm.stack_index as u16);
-
-                    // switch to closure's chunk
-                    vm.current_chunk = c.chunk.clone();
-                    vm.ip = 0;
+                    call_closure(c)?;
                 }
 
 
@@ -420,6 +426,12 @@ pub fn execute_instruction(
 
                     // reset stack index after popping args
                     vm.stack_index -= num_args as u32;
+                },
+                Value::Class(c) => {
+                    let class_instance = ClassInstance::new(c.clone());
+
+                    // todo: call constructor
+                    vm.registers[fn_register as usize] = Value::Instance(class_instance);
                 }
 
                 _ => return Err(EvaluateErrorDetails::ExpectedFunction),

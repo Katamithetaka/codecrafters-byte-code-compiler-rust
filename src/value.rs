@@ -1,9 +1,10 @@
 pub mod function;
 pub mod class;
+pub mod class_instance;
 
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use crate::value::class::Class;
+use crate::value::{class::Class, class_instance::ClassInstance};
 pub use crate::{prelude::EvaluateErrorDetails, value::function::{Closure, Function, GlobalFunction}};
 
 
@@ -26,7 +27,8 @@ pub enum Value<S> {
     /// A reference-counted, mutable value.
     Cell(Rc<RefCell<Value<S>>>),
     Closure(Closure<S>),
-    Class(Class)
+    Class(Class),
+    Instance(ClassInstance)
 }
 
 impl<S: Display> Display for Value<S> {
@@ -41,6 +43,8 @@ impl<S: Display> Display for Value<S> {
             Value::Cell(s) => write!(f, "{}", s.borrow()),
             Value::Closure(closure) => write!(f, "{}", closure.function),
             Value::Class(class) => write!(f, "{}", class),
+            Value::Instance(class) => write!(f, "{}", class),
+
         }
     }
 }
@@ -77,7 +81,8 @@ impl<'a> From<Value<&'a str>> for Value<String> {
             Value::Closure(_) => {
                 panic!("Closures can't exist at compile time therefore this conversion shouldn't happen!")
             },
-            Value::Class(class) => Value::Class(class)
+            Value::Class(class) => Value::Class(class),
+            Value::Instance(class_instance) => Value::Instance(class_instance),
         }
     }
 }
