@@ -3,7 +3,7 @@
 
 use std::rc::Rc;
 
-use crate::{compiler::{compiler::Compiler}, expressions::{GlobalFunction, Value}};
+use crate::{compiler::{compiler::Compiler}, value::{GlobalFunction, Value}};
 
 pub mod clock;
 

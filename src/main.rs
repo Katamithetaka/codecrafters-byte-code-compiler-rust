@@ -15,6 +15,10 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         eprintln!("Usage: {} tokenize <filename>", args[0]);
+        eprintln!("Usage: {} parse <filename>", args[0]);
+        eprintln!("Usage: {} evaluate <filename>", args[0]);
+        eprintln!("Usage: {} run <filename>", args[0]);
+
         return;
     }
 

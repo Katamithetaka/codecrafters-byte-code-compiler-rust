@@ -6,7 +6,7 @@ use std::{cell::RefCell, fmt::Debug, rc::Rc};
 use crate::{
     compiler::{CodeGenerator, compiler::Compiler},
     statements::{
-        block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement, print_statement::PrintStatement, return_statement::ReturnStatement, while_statements::WhileStatement
+        block_statement::BlockStatement, class_declare_statement::ClassDeclareStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement, print_statement::PrintStatement, return_statement::ReturnStatement, while_statements::WhileStatement
     },
 };
 
@@ -19,6 +19,7 @@ pub mod while_statements;
 pub mod for_statement;
 pub mod function_declaration_statement;
 pub mod return_statement;
+pub mod class_declare_statement;
 
 /// A trait representing a generic statement in the interpreter.
 ///
@@ -59,6 +60,8 @@ pub enum Statements<'a> {
 
     /// A return statement, which exits a function and optionally returns a value.
     ReturnStatement(ReturnStatement<'a>),
+
+    ClassDeclareStatement(ClassDeclareStatement<'a>),
 }
 
 
@@ -112,6 +115,9 @@ impl<'a> CodeGenerator<'a> for Statements<'a> {
             }
             Statements::ReturnStatement(statement) => {
                 statement.write_expression(chunk, dst_register, reserved_registers)
+            },
+            Statements::ClassDeclareStatement(statement) => {
+                statement.write_expression(chunk, dst_register, reserved_registers)
             }
         }
     }
@@ -131,4 +137,6 @@ pub mod prelude {
     pub use super::print_statement::PrintStatement;
     pub use super::return_statement::ReturnStatement;
     pub use super::while_statements::WhileStatement;
+    pub use super::class_declare_statement::ClassDeclareStatement;
+
 }

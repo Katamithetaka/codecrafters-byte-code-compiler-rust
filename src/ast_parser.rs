@@ -1,14 +1,11 @@
 use std::{fmt::Display, iter::Peekable};
 
 use crate::{
-    Token,
-    expressions::{
+    Token, expressions::{
         Expressions, assignment_expression::AssignmentExpression, binary_expression::{BinaryExpression, BinaryOp}, call_expression::CallExpression, equality_expression::{EqualityExpression, EqualityOp}, group::Group, identifier::Identifier, logical_expression::{LogicalExpression, LogicalOp}, relation_expression::{RelationalExpression, RelationalOp}, unary_expression::{UnaryExpression, UnaryOp}
-    },
-    scanner::{Keyword, TokenKind},
-    statements::{
+    }, prelude::ClassDeclareStatement, scanner::{Keyword, TokenKind}, statements::{
         Statements, block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement, print_statement::PrintStatement, return_statement::ReturnStatement, while_statements::WhileStatement
-    },
+    }
 };
 
 /// Represents the state of the AST parser, including the current position,
@@ -431,6 +428,17 @@ impl<'a> AstParser<'a> {
         return Ok(statement.into())
     }
 
+    pub fn class_declaration(&mut self) -> Result<Statements<'a>, ParserError> {
+        let class_name = self.identifier()?;
+        self.consume(TokenKind::LeftBrace)?;
+        // TODO: class methods
+        self.consume(TokenKind::RightBrace)?;
+
+        let statement = ClassDeclareStatement::new(class_name);
+
+        return Ok(statement.into())
+    }
+
     pub fn declaration(&mut self) -> Result<Statements<'a>, ParserError> {
 
         match self.token_kind() {
@@ -441,6 +449,10 @@ impl<'a> AstParser<'a> {
             TokenKind::Keyword(Keyword::Fun) => {
                 self.advance();
                 Ok(self.function_declaration()?.into())
+            }
+            TokenKind::Keyword(Keyword::Class) => {
+                self.advance();
+                Ok(self.class_declaration()?.into())
             }
             _ => self.statement(),
         }
