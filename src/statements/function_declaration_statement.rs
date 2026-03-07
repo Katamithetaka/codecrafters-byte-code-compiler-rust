@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    ParserError, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}}, expressions::{
+    ParserError, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}, int_types::{line_type, register_index_type}}, expressions::{
         Function, Value,
         identifier::Identifier,
     }, statements::{Statement, Statements}
@@ -32,14 +32,14 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
     fn write_expression(
         &mut self,
         compiler: Rc<RefCell<Compiler<'a>>>,
-        dst: Option<u8>,
-        reserved_registers: Vec<u8>,
+        dst: Option<register_index_type>,
+        reserved_registers: Vec<register_index_type>,
     ) -> crate::compiler::Result {
         let dst_reg = self.dst_or_default(dst, &reserved_registers);
         let mut chunk = compiler.borrow_mut();
 
         // Declare the function name in the parent scope
-        chunk.declare_function(self.ident.token, self.ident.line as i32);
+        chunk.declare_function(self.ident.token, self.ident.line as line_type);
         chunk.mark_declared(self.ident.token.to_string());
 
         match chunk.resolve_variable(self.ident.token)? {
@@ -47,7 +47,7 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
 
             },
             ResolvedVar::Global(varint) => {
-                chunk.write_declare_global(varint, dst_reg, self.ident.line as i32);
+                chunk.write_declare_global(varint, dst_reg, self.ident.line as line_type);
             },
             ResolvedVar::Upvalue(_) => unreachable!(),
         }
@@ -60,7 +60,7 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
         // Add parameters as locals in the nested compiler
         for arg in &self.args {
             let mut fn_compiler = fn_compiler.borrow_mut();
-            match fn_compiler.declare_variable(arg.token, self.ident.line as i32) {
+            match fn_compiler.declare_variable(arg.token, self.ident.line as line_type) {
                 Ok(_) => {},
                 Err(_) => {
                     Err(ParserError {
@@ -78,8 +78,8 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
             if let Statements::FunctionDeclareStatement(func) = statement {
                 let mut fn_compiler = fn_compiler.borrow_mut();
 
-                fn_compiler.declare_function(func.ident.token, func.ident.line as i32);
-                fn_compiler.write_declare_local(0, func.ident.line as i32);
+                fn_compiler.declare_function(func.ident.token, func.ident.line as line_type);
+                fn_compiler.write_declare_local(0, func.ident.line as line_type);
 
             }
         }
@@ -89,7 +89,7 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
 
             if statement.is_return() {
                 let mut fn_compiler = fn_compiler.borrow_mut();
-                fn_compiler.write_function_return(self.ident.line as i32);
+                fn_compiler.write_function_return(self.ident.line as line_type);
                 wrote_return = true;
                 break;
             }
@@ -97,9 +97,9 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
 
         if !wrote_return {
             let mut fn_compiler = fn_compiler.borrow_mut();
-            let null_const = fn_compiler.get_or_write_constant(Value::Null, self.ident.line as i32);
-            fn_compiler.write_load(0, null_const, self.ident.line as i32);
-            fn_compiler.write_function_return(self.ident.line as i32);
+            let null_const = fn_compiler.get_or_write_constant(Value::Null, self.ident.line as line_type);
+            fn_compiler.write_load(0, null_const, self.ident.line as line_type);
+            fn_compiler.write_function_return(self.ident.line as line_type);
         }
 
         // Create the function object (with its upvalue count)
@@ -114,14 +114,14 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
 
 
 
-        compiler.write_closure(dst_reg, constant, &fn_compiler.borrow().upvalues, self.ident.line as i32);
+        compiler.write_closure(dst_reg, constant, &fn_compiler.borrow().upvalues, self.ident.line as line_type);
 
         // Assign the function to the declared variable
         match compiler.resolve_variable(self.ident.token)? {
             ResolvedVar::Local(slot) => {
-                compiler.write_set_local(dst_reg, slot, self.ident.line as i32);
+                compiler.write_set_local(dst_reg, slot, self.ident.line as line_type);
             },
-            ResolvedVar::Global(varint) => compiler.write_set_global(varint, dst_reg, self.ident.line as i32),
+            ResolvedVar::Global(varint) => compiler.write_set_global(varint, dst_reg, self.ident.line as line_type),
             ResolvedVar::Upvalue(_) => unreachable!(),
         }
 

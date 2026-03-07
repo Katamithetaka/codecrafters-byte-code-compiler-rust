@@ -2,7 +2,7 @@ use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
     Token,
-    compiler::{CodeGenerator,  compiler::Compiler},
+    compiler::{CodeGenerator,  compiler::Compiler, int_types::{line_type, register_index_type}},
     expressions::{Expression, Value},
     scanner::{Keyword, TokenKind, TokenValue},
 };
@@ -32,8 +32,8 @@ impl<'a> Literal<'a> {
 }
 
 impl<'a> Expression<'a> for Literal<'a> {
-    fn line_number(&self) -> usize {
-        self.token.line
+    fn line_number(&self) -> line_type {
+        self.token.line as line_type
     }
 }
 
@@ -41,15 +41,15 @@ impl<'a> CodeGenerator<'a> for Literal<'a> {
     fn write_expression(
         &mut self,
         chunk: Rc<RefCell<Compiler<'a>>>,
-        dst_register: Option<u8>,
-        _reserved_registers: Vec<u8>,
+        dst_register: Option<register_index_type>,
+        _reserved_registers: Vec<register_index_type>,
     ) -> crate::compiler::Result {
         let mut chunk = chunk.borrow_mut();
         let constant = match self.token.token {
             TokenKind::Number => match self.token.value {
                 TokenValue::Number(v) => {
                     let constant =
-                        chunk.get_or_write_constant(Value::Number(v), self.line_number() as i32);
+                        chunk.get_or_write_constant(Value::Number(v), self.line_number());
                     constant
                 }
                 _ => panic!("Got null token when evaluating literal"),
@@ -57,23 +57,23 @@ impl<'a> CodeGenerator<'a> for Literal<'a> {
             TokenKind::String => match self.token.value {
                 TokenValue::String(v) => {
                     let constant =
-                        chunk.get_or_write_constant(Value::String(v), self.line_number() as i32);
+                        chunk.get_or_write_constant(Value::String(v), self.line_number());
                     constant
                 }
                 _ => panic!("Got null token when evaluating literal"),
             },
             TokenKind::Keyword(Keyword::True) => {
                 let constant =
-                    chunk.get_or_write_constant(Value::Boolean(true), self.line_number() as i32);
+                    chunk.get_or_write_constant(Value::Boolean(true), self.line_number());
                 constant
             }
             TokenKind::Keyword(Keyword::False) => {
                 let constant =
-                    chunk.get_or_write_constant(Value::Boolean(false), self.line_number() as i32);
+                    chunk.get_or_write_constant(Value::Boolean(false), self.line_number());
                 constant
             }
             TokenKind::Keyword(Keyword::Nil) => {
-                let constant = chunk.get_or_write_constant(Value::Null, self.line_number() as i32);
+                let constant = chunk.get_or_write_constant(Value::Null, self.line_number());
                 constant
             }
             _ => panic!("Invalid token considered as literal"),
@@ -81,7 +81,7 @@ impl<'a> CodeGenerator<'a> for Literal<'a> {
 
         match dst_register {
             Some(v) => {
-                chunk.write_load(v, constant, self.line_number() as i32);
+                chunk.write_load(v, constant, self.line_number());
             }
             None => {}
         };

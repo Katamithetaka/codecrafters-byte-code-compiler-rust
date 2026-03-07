@@ -1,8 +1,8 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
-    compiler::{CodeGenerator, compiler::Compiler, instructions::Instructions},
-    expressions::{EvaluateError, EvaluateErrorDetails, Expression, Expressions},
+    compiler::{CodeGenerator, compiler::Compiler, instructions::Instructions, int_types::{line_type, register_index_type}},
+    expressions::{Expression, Expressions},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -25,7 +25,7 @@ pub struct LogicalExpression<'a> {
     pub lhs: Box<Expressions<'a>>,
     pub rhs: Box<Expressions<'a>>,
     pub op: LogicalOp,
-    line_number: usize,
+    line_number: line_type,
 }
 
 impl<'a> Display for LogicalExpression<'a> {
@@ -46,7 +46,7 @@ impl<'a> LogicalExpression<'a> {
 }
 
 impl<'a> Expression<'a> for LogicalExpression<'a> {
-    fn line_number(&self) -> usize {
+    fn line_number(&self) -> line_type{
         self.line_number
     }
 }
@@ -55,8 +55,8 @@ impl<'a> CodeGenerator<'a> for LogicalExpression<'a> {
     fn write_expression(
         &mut self,
         chunk: Rc<RefCell<Compiler<'a>>>,
-        dst_register: Option<u8>,
-        reserved_registers: Vec<u8>,
+        dst_register: Option<register_index_type>,
+        reserved_registers: Vec<register_index_type>
     ) -> crate::compiler::Result {
         let dst = self.dst_or_default(dst_register, &reserved_registers);
         let boolean_dst = match self.op {
@@ -68,7 +68,7 @@ impl<'a> CodeGenerator<'a> for LogicalExpression<'a> {
                     Instructions::Bang,
                     dst,
                     self.next_dst(dst, 1, &reserved_registers),
-                    self.lhs.line_number() as i32,
+                    self.lhs.line_number(),
                 );
                 self.next_dst(dst, 1, &reserved_registers)
             }
@@ -82,17 +82,13 @@ impl<'a> CodeGenerator<'a> for LogicalExpression<'a> {
 
 
         let offset =
-            chunk.borrow_mut().write_jump_if_false_placeholder(boolean_dst, self.lhs.line_number() as i32);
+            chunk.borrow_mut().write_jump_if_false_placeholder(boolean_dst, self.lhs.line_number())?;
 
         self.rhs
             .write_expression(chunk.clone(), Some(dst), reserved_registers.clone())?;
 
-        match chunk.borrow_mut().update_jump(offset) {
-            Ok(_) => Ok(()),
-            Err(_) => Err(EvaluateError {
-                error: EvaluateErrorDetails::CodeTooLong,
-                line: self.rhs.line_number(),
-            }),
-        }
+        chunk.borrow_mut().update_jump(offset)?;
+
+        Ok(())
     }
 }

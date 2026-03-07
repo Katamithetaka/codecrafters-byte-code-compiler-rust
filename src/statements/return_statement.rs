@@ -1,18 +1,17 @@
 use std::{cell::RefCell, rc::Rc};
 
-use strum::ParseError;
 
 use crate::{
-    ParserError, compiler::{CodeGenerator, compiler::Compiler}, expressions::{Expressions, Value}, statements::Statement
+    ParserError, compiler::{CodeGenerator, compiler::Compiler, int_types::{line_type, register_index_type}}, expressions::{Expressions, Value}, statements::Statement
 };
 
 #[derive(Debug)]
 pub struct ReturnStatement<'a> {
     pub expr: Option<Expressions<'a>>,
-    pub line_number: usize,
+    pub line_number: line_type,
 }
 impl<'a> ReturnStatement<'a> {
-    pub fn new(expr: Option<Expressions<'a>>, line_number: usize) -> Self {
+    pub fn new(expr: Option<Expressions<'a>>, line_number: line_type) -> Self {
         Self { expr, line_number }
     }
 }
@@ -22,8 +21,8 @@ impl<'a> CodeGenerator<'a> for ReturnStatement<'a> {
     fn write_expression(
         &mut self,
         chunk: Rc<RefCell<Compiler<'a>>>,
-        _dst_register: Option<u8>,
-        reserved_registers: Vec<u8>,
+        _dst_register: Option<register_index_type>,
+        reserved_registers: Vec<register_index_type>,
     ) -> crate::compiler::Result {
         let dist = 0;
 
@@ -40,12 +39,12 @@ impl<'a> CodeGenerator<'a> for ReturnStatement<'a> {
         }
         else {
             let mut chunk = chunk.borrow_mut();
-            let constant = chunk.get_or_write_constant(Value::Null, self.line_number as i32);
-            chunk.write_load(0, constant, self.line_number as i32);
+            let constant = chunk.get_or_write_constant(Value::Null, self.line_number as line_type);
+            chunk.write_load(0, constant, self.line_number as line_type);
         }
         let mut chunk = chunk.borrow_mut();
 
-        chunk.write_function_return( self.line_number as i32);
+        chunk.write_function_return( self.line_number as line_type);
 
         Ok(())
     }

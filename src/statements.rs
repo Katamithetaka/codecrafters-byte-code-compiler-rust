@@ -4,7 +4,7 @@
 use std::{cell::RefCell, fmt::Debug, rc::Rc};
 
 use crate::{
-    compiler::{CodeGenerator, compiler::Compiler},
+    compiler::{CodeGenerator, compiler::Compiler, int_types::register_index_type},
     statements::{
         block_statement::BlockStatement, class_declare_statement::ClassDeclareStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement, print_statement::PrintStatement, return_statement::ReturnStatement, while_statements::WhileStatement
     },
@@ -85,8 +85,8 @@ impl<'a> CodeGenerator<'a> for Statements<'a> {
     fn write_expression(
         &mut self,
         chunk: Rc<RefCell<Compiler<'a>>>,
-        dst_register: Option<u8>,
-        reserved_registers: Vec<u8>,
+        dst_register: Option<register_index_type>,
+        reserved_registers: Vec<register_index_type>
     ) -> crate::compiler::Result {
         match self {
             Statements::DeclareStatement(statement) => {

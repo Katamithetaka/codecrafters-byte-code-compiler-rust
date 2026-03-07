@@ -1,8 +1,9 @@
 use std::{cell::RefCell, fmt::{Debug, Display}, rc::Rc};
 
+
 use crate::{
-    ParserError, compiler::{CodeGenerator, compiler::Compiler}, expressions::{
-        assignment_expression::AssignmentExpression, binary_expression::BinaryExpression, call_expression::CallExpression, equality_expression::EqualityExpression, group::Group, identifier::Identifier, literal::Literal, logical_expression::LogicalExpression, relation_expression::RelationalExpression, unary_expression::UnaryExpression
+    ParserError, compiler::{CodeGenerator, compiler::Compiler, int_types::{line_type, register_index_type}}, expressions::{
+        assignment_expression::AssignmentExpression, binary_expression::BinaryExpression, call_expression::CallExpression, equality_expression::EqualityExpression, get_expression::GetExpression, group::Group, identifier::Identifier, literal::Literal, logical_expression::LogicalExpression, relation_expression::RelationalExpression, set_expression::SetExpression, unary_expression::UnaryExpression
     }
 };
 
@@ -28,6 +29,8 @@ pub mod relation_expression;
 pub mod unary_expression;
 /// Module containing the definition and implementation of call expressions.
 pub mod call_expression;
+pub mod get_expression;
+pub mod set_expression;
 
 /// The `prelude` module re-exports commonly used types and functions from this module.
 ///
@@ -76,6 +79,9 @@ pub enum EvaluateErrorDetails {
     /// Error for expecting a function operand.
     #[error("Operand must be function.")]
     ExpectedFunction,
+
+    #[error("Operand must be class instance.")]
+    ExpectedClassInstance,
     /// Error for mismatched operand types in binary operations.
     #[error("Operands must be two numbers or two strings. ")]
     UnmatchedTypes,
@@ -122,17 +128,19 @@ pub enum EvaluateErrorDetails {
 #[derive(thiserror::Error, Debug)]
 pub struct EvaluateError {
     pub error: EvaluateErrorDetails,
-    pub line: usize,
+    pub line: line_type,
 }
 
 impl From<ParserError> for EvaluateError {
     fn from(err: ParserError) -> Self {
         EvaluateError {
-            line: err.line,
+            line: err.line as line_type,
             error: EvaluateErrorDetails::ParserError(err),
         }
     }
 }
+
+
 
 impl Display for EvaluateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -141,7 +149,7 @@ impl Display for EvaluateError {
 }
 
 pub trait Expression<'a>: Display + Debug + CodeGenerator<'a> {
-    fn line_number(&self) -> usize;
+    fn line_number(&self) -> line_type;
 }
 
 #[derive(Debug, derive_more::From, derive_more::Display, derive_more::TryInto)]
@@ -164,13 +172,16 @@ pub enum Expressions<'a> {
     RelationalExpression(RelationalExpression<'a>),
     #[from]
     AssignmentExpression(AssignmentExpression<'a>),
-
+    #[from]
+    GetExpression(GetExpression<'a>),
+    #[from]
+    SetExpression(SetExpression<'a>),
     #[from]
     CallExpression(CallExpression<'a>),
 }
 
 impl<'a> Expression<'a> for Expressions<'a> {
-    fn line_number(&self) -> usize {
+    fn line_number(&self) -> line_type {
         match self {
             Expressions::BinaryExpression(binary_expression) => binary_expression.line_number(),
             Expressions::EqualityExpression(equality_expression) => {
@@ -190,6 +201,12 @@ impl<'a> Expression<'a> for Expressions<'a> {
             Expressions::CallExpression(call_expression) =>  {
                 call_expression.line_number()
             }
+            Expressions::GetExpression(get_expression) => {
+                get_expression.line_number()
+            }
+            Expressions::SetExpression(get_expression) => {
+                get_expression.line_number()
+            }
         }
     }
 }
@@ -198,8 +215,8 @@ impl<'a> CodeGenerator<'a> for Expressions<'a> {
     fn write_expression(
         &mut self,
         chunk: Rc<RefCell<Compiler<'a>>>,
-        dst_register: Option<u8>,
-        reserved_registers: Vec<u8>,
+        dst_register: Option<register_index_type>,
+        reserved_registers: Vec<register_index_type>
     ) -> crate::compiler::Result {
         match self {
             Expressions::BinaryExpression(binary_expression) => {
@@ -231,6 +248,12 @@ impl<'a> CodeGenerator<'a> for Expressions<'a> {
             }
             Expressions::CallExpression(call_expression) => {
                 call_expression.write_expression(chunk, dst_register, reserved_registers)
+            }
+            Self::GetExpression(get_expression) => {
+                get_expression.write_expression(chunk, dst_register, reserved_registers)
+            }
+            Self::SetExpression(get_expression) => {
+                get_expression.write_expression(chunk, dst_register, reserved_registers)
             }
         }
     }

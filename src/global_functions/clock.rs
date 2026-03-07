@@ -10,4 +10,4 @@ pub fn execute(_: Vec<Value<String>>) -> Value<String> {
 }
 
 pub const NAME: &str = "clock";
-pub const NUM_ARGUMENTS: u8 = 0;
+pub const NUM_ARGUMENTS: Option<u8> = Some(0);

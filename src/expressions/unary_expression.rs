@@ -1,7 +1,7 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
-    compiler::{CodeGenerator,  compiler::Compiler, instructions::Instructions},
+    compiler::{CodeGenerator,  compiler::Compiler, instructions::Instructions, int_types::{line_type, register_index_type}},
     expressions::{Expression, Expressions},
 };
 
@@ -39,7 +39,7 @@ impl<'a> UnaryExpression<'a> {
 }
 
 impl<'a> Expression<'a> for UnaryExpression<'a> {
-    fn line_number(&self) -> usize {
+    fn line_number(&self) -> line_type {
         self.rhs.line_number()
     }
 }
@@ -48,8 +48,8 @@ impl<'a> CodeGenerator<'a> for UnaryExpression<'a> {
     fn write_expression(
         &mut self,
         chunk: Rc<RefCell<Compiler<'a>>>,
-        dst_register: Option<u8>,
-        reserved_registers: Vec<u8>,
+        dst_register: Option<register_index_type>,
+        reserved_registers: Vec<register_index_type>
     ) -> crate::compiler::Result {
         let my_dst_register = match dst_register {
             Some(v) => v,
@@ -69,13 +69,13 @@ impl<'a> CodeGenerator<'a> for UnaryExpression<'a> {
                 Instructions::Bang,
                 my_dst_register,
                 dst,
-                self.line_number() as i32,
+                self.line_number(),
             ),
             UnaryOp::Minus => chunk.borrow_mut().write_unary(
                 Instructions::Negate,
                 my_dst_register,
                 dst,
-                self.line_number() as i32,
+                self.line_number(),
             ),
         };
 

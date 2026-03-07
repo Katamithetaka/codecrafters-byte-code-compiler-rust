@@ -1,13 +1,13 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::compiler::{compiler::Compiler};
+use crate::compiler::{compiler::Compiler, int_types::register_index_type};
 
 pub mod chunk;
 pub mod instructions;
-pub mod value;
 pub mod varint;
 pub mod vm;
 pub mod compiler;
+pub mod int_types;
 
 
 
@@ -35,8 +35,8 @@ pub trait CodeGenerator<'a> {
     fn write_expression(
         &mut self,
         chunk: Rc<RefCell<Compiler<'a>>>,
-        dst_register: Option<u8>,
-        reserved_registers: Vec<u8>,
+        dst_register: Option<register_index_type>,
+        reserved_registers: Vec<register_index_type>,
     ) -> Result;
 
     /// Determines the destination register to use, defaulting to the next available register.
@@ -49,7 +49,7 @@ pub trait CodeGenerator<'a> {
     /// # Returns
     ///
     /// The destination register to use.
-    fn dst_or_default(&self, dst: Option<u8>, reserved_registers: &[u8]) -> u8 {
+    fn dst_or_default(&self, dst: Option<register_index_type>, reserved_registers: &[register_index_type]) -> register_index_type {
         dst.unwrap_or(reserved_registers.iter().max().copied().unwrap_or(0) + 1)
     }
 
@@ -64,7 +64,7 @@ pub trait CodeGenerator<'a> {
     /// # Returns
     ///
     /// The next destination register.
-    fn next_dst(&self, dst: u8, offset: u8, reserved_registers: &[u8]) -> u8 {
+    fn next_dst(&self, dst: register_index_type, offset: register_index_type, reserved_registers: &[register_index_type]) -> register_index_type {
         reserved_registers.iter().max().copied().unwrap_or(0) + dst + offset
     }
 }
@@ -97,7 +97,7 @@ pub mod macros {
                 let r0 = my_dst_register_0;
                 let r1 = my_dst_register_1;
 
-                $chunk.borrow_mut().write_binary($instruction, r0, r1, dst, $self.line_number() as i32);
+                $chunk.borrow_mut().write_binary($instruction, r0, r1, dst, $self.line_number());
                 Ok(())
             }
         };

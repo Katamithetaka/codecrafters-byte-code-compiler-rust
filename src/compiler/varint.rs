@@ -1,12 +1,12 @@
-use crate::{compiler::compiler::Compiler, prelude::Chunk};
+use crate::{compiler::{compiler::Compiler, int_types::{line_type, varint_type}}, prelude::Chunk};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Varint(pub u32);
+pub struct Varint(pub varint_type);
 
 impl Varint {
     /// Writes a u32 as a varint (1–4 bytes).
     /// Returns the number of bytes written.
-    pub fn write_bytes(&self, chunk: &mut Compiler, line: i32) -> usize {
+    pub fn write_bytes(&self, chunk: &mut Compiler, line: line_type) -> usize {
         let mut written = 0;
         let mut value = self.0;
         loop {
@@ -30,7 +30,7 @@ impl Varint {
 
     /// Reads a varint starting at `offset`.
     /// Returns (value, bytes_read).
-    pub fn read_bytes<T>(chunk: &Chunk<T>, offset: usize) -> (u32, usize) {
+    pub fn read_bytes<T>(chunk: &Chunk<T>, offset: usize) -> (varint_type, usize) {
         let mut result = 0u32;
         let mut shift = 0;
         let mut bytes_read = 0;
@@ -39,7 +39,7 @@ impl Varint {
             let byte = chunk.code[offset + bytes_read];
             bytes_read += 1;
 
-            result |= ((byte & 0x7F) as u32) << shift;
+            result |= ((byte & 0x7F) as varint_type) << shift;
 
             if byte & 0x80 == 0 {
                 break;

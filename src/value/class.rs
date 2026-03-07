@@ -1,6 +1,6 @@
 use std::{fmt::Display, rc::Rc};
 
-use crate::{compiler::{compiler::Compiler, varint::Varint}, value::{Closure, class}};
+use crate::{value::{Closure}};
 
 /// Represents the internal details of a function, including its name, starting position, and argument count.
 #[derive(Clone, Debug)]

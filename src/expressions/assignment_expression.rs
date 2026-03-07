@@ -1,7 +1,7 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
-    compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}},
+    compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}, int_types::{line_type, register_index_type}},
     expressions::{
         Expression, Expressions,
         identifier::Identifier,
@@ -12,7 +12,7 @@ use crate::{
 pub struct AssignmentExpression<'a> {
     pub lhs: Identifier<'a>,
     pub rhs: Box<Expressions<'a>>,
-    line_number: usize,
+    line_number: line_type,
 }
 
 impl<'a> Display for AssignmentExpression<'a> {
@@ -32,7 +32,7 @@ impl<'a> AssignmentExpression<'a> {
 }
 
 impl<'a> Expression<'a> for AssignmentExpression<'a> {
-    fn line_number(&self) -> usize {
+    fn line_number(&self) -> line_type{
         self.line_number
     }
 }
@@ -41,8 +41,8 @@ impl<'a> CodeGenerator<'a> for AssignmentExpression<'a> {
     fn write_expression(
         &mut self,
         chunk: Rc<RefCell<Compiler<'a>>>,
-        dst_register: Option<u8>,
-        reserved_registers: Vec<u8>,
+        dst_register: Option<register_index_type>,
+        reserved_registers: Vec<register_index_type>
     ) -> crate::compiler::Result {
         let dist = self.dst_or_default(dst_register, &reserved_registers);
         self.rhs
@@ -50,13 +50,13 @@ impl<'a> CodeGenerator<'a> for AssignmentExpression<'a> {
         let mut chunk = chunk.borrow_mut();
         match chunk.resolve_variable(self.lhs.token)? {
             ResolvedVar::Local(i) => {
-                chunk.write_set_local(dist, i, self.line_number as i32);
+                chunk.write_set_local(dist, i, self.line_number as line_type);
             },
             ResolvedVar::Upvalue(slot) => {
-                chunk.write_set_upvalue(dist, slot, self.line_number as i32);
+                chunk.write_set_upvalue(dist, slot, self.line_number as line_type);
             },
             ResolvedVar::Global(varint) => {
-                chunk.write_set_global(varint, dist, self.line_number as i32);
+                chunk.write_set_global(varint, dist, self.line_number as line_type);
             },
         }
         Ok(())

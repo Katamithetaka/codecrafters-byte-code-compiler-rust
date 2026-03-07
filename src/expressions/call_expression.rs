@@ -1,6 +1,6 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use crate::{compiler::{CodeGenerator, compiler::{Compiler, Local}}, expressions::{Expression, Expressions}};
+use crate::{compiler::{CodeGenerator, compiler::{Compiler, Local}, int_types::{line_type, register_index_type}}, expressions::{Expression, Expressions}};
 
 #[derive(Debug)]
 pub struct CallExpression<'a> {
@@ -29,7 +29,7 @@ impl Display for CallExpression<'_> {
 }
 
 impl<'a> Expression<'a> for CallExpression<'a> {
-    fn line_number(&self) -> usize {
+    fn line_number(&self) -> line_type {
         self.lhs.line_number()
     }
 }
@@ -38,8 +38,8 @@ impl<'a> CodeGenerator<'a> for CallExpression<'a> {
     fn write_expression(
         &mut self,
         chunk: Rc<RefCell<Compiler<'a>>>,
-        dst_register: Option<u8>,
-        reserved_registers: Vec<u8>,
+        dst_register: Option<register_index_type>,
+        reserved_registers: Vec<register_index_type>
     ) -> crate::compiler::Result {
         let dist = self.dst_or_default(dst_register, &reserved_registers);
 
@@ -50,9 +50,9 @@ impl<'a> CodeGenerator<'a> for CallExpression<'a> {
         for argument in self.arguments.iter_mut() {
             argument.write_expression(chunk.clone(), Some(dst), reserved_registers.clone())?;
             chunk.borrow_mut().locals.push(Local { name: "".to_string(), depth: 0, is_captured: false, is_predeclared: false });
-            chunk.borrow_mut().write_declare_local(dst, argument.line_number() as i32);
+            chunk.borrow_mut().write_declare_local(dst, argument.line_number());
         }
-        chunk.borrow_mut().write_fn_call(dist, self.arguments.len() as u8, self.lhs.line_number() as i32);
+        chunk.borrow_mut().write_fn_call(dist, self.arguments.len() as u8, self.lhs.line_number());
 
 
         Ok(())

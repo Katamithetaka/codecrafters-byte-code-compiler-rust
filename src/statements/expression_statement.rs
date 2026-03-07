@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{compiler::{CodeGenerator, compiler::Compiler}, expressions::Expressions, statements::Statement};
+use crate::{compiler::{CodeGenerator, compiler::Compiler, int_types::register_index_type}, expressions::Expressions, statements::Statement};
 
 #[derive(Debug)]
 pub struct ExprStatement<'a> {
@@ -17,8 +17,8 @@ impl<'a> CodeGenerator<'a> for ExprStatement<'a> {
     fn write_expression(
         &mut self,
         chunk: Rc<RefCell<Compiler<'a>>>,
-        dst_register: Option<u8>,
-        reserved_registers: Vec<u8>,
+        dst_register: Option<register_index_type>,
+        reserved_registers: Vec<register_index_type>
     ) -> crate::compiler::Result {
         let dist = self.dst_or_default(dst_register, &reserved_registers);
 

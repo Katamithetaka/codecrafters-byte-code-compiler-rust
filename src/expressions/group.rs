@@ -1,7 +1,7 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
-    compiler::{CodeGenerator, compiler::Compiler},
+    compiler::{CodeGenerator, compiler::Compiler, int_types::{line_type, register_index_type}},
     expressions::{Expression, Expressions},
 };
 
@@ -23,7 +23,7 @@ impl<'a> Group<'a> {
 }
 
 impl<'a> Expression<'a> for Group<'a> {
-    fn line_number(&self) -> usize {
+    fn line_number(&self) -> line_type {
         self.expr.line_number()
     }
 }
@@ -32,8 +32,8 @@ impl<'a> CodeGenerator<'a> for Group<'a> {
     fn write_expression(
         &mut self,
         compiler: Rc<RefCell<Compiler<'a>>>,
-        dst_register: Option<u8>,
-        reserved_registers: Vec<u8>,
+        dst_register: Option<register_index_type>,
+        reserved_registers: Vec<register_index_type>
     ) -> crate::compiler::Result {
         self.expr
             .write_expression(compiler, dst_register, reserved_registers)

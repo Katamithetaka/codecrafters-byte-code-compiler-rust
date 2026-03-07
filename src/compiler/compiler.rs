@@ -1,6 +1,6 @@
-use std::{cell::RefCell, num::TryFromIntError, rc::Rc};
+use std::{cell::RefCell,  rc::Rc};
 
-use crate::{ParserError, compiler::{instructions::{Instructions, disassemble_instruction}, varint::Varint}, expressions::Value, prelude::Chunk};
+use crate::{ParserError, compiler::{instructions::{Instructions, disassemble_instruction}, int_types::{instruction_length_type, line_type, register_index_type, stack_index_type}, varint::Varint}, expressions::Value, prelude::{Chunk, EvaluateError}};
 
 #[allow(unused)]
 #[derive(Debug, Clone)]
@@ -14,7 +14,7 @@ pub struct Local {
 #[allow(unused)]
 pub struct UpvalueDesc {
     pub is_local: bool,
-    pub index: u16,
+    pub index: stack_index_type,
 }
 
 
@@ -31,8 +31,8 @@ pub struct Compiler<'a> {
 }
 
 pub enum ResolvedVar {
-    Local(u16),
-    Upvalue(u16),
+    Local(stack_index_type),
+    Upvalue(stack_index_type),
     Global(Varint),
 }
 
@@ -83,84 +83,112 @@ impl<'a> Compiler<'a> {
 
     pub fn add_constant(&mut self, value: Value<&'a str>) -> Varint {
         return self.chunk.add_constant(value)
-
     }
 
-    pub fn get_or_write_constant(&mut self, value: Value<&'a str>, line: i32) -> Varint {
+    pub fn get_or_write_constant(&mut self, value: Value<&'a str>, line: line_type) -> Varint {
         match self.get_constant(&value) {
             Some(constant) => constant,
             None => {
                 let constant = self.add_constant(value);
-                self.write_constant(constant, line as i32);
+                self.write_constant(constant, line);
                 constant
             }
         }
     }
 
-    pub fn write(&mut self, byte: u8, line: i32) {
+    pub fn write(&mut self, byte: u8, line: line_type) {
         self.chunk.write(byte, line);
     }
 
-    pub fn write_instruction(&mut self, byte: Instructions, line: i32) {
+    pub fn write_bytes(&mut self, bytes: &[u8], line: line_type) {
+        for byte in bytes {
+            self.chunk.write(*byte, line);
+        }
+    }
+
+
+
+    pub fn write_instruction(&mut self, byte: Instructions, line: line_type) {
         return self.write(byte as u8, line);
     }
 
-    pub fn write_constant(&mut self, constant: Varint, line: i32) -> usize {
+    pub fn write_constant(&mut self, constant: Varint, line: line_type) -> usize {
         self.write_instruction(Instructions::Constant, line);
         constant.write_bytes(self, line)
     }
 
-    pub fn write_binary(&mut self, byte: Instructions, r0: u8, r1: u8, dst: u8, line: i32) {
+    pub fn write_binary(&mut self, byte: Instructions, r0: register_index_type, r1: register_index_type, dst: register_index_type, line: line_type) {
         self.write(byte as u8, line);
-        self.write(r0 as u8, line);
-        self.write(r1 as u8, line);
-        self.write(dst as u8, line);
+        self.write_bytes(&r0.to_be_bytes(), line);
+        self.write_bytes(&r1.to_be_bytes(), line);
+        self.write_bytes(&dst.to_be_bytes(), line);
     }
 
-    pub fn write_load(&mut self, register_index: u8, constant: Varint, line: i32) -> usize {
+    pub fn write_load(&mut self, register_index: register_index_type, constant: Varint, line: line_type) -> usize {
         self.write_instruction(Instructions::Load, line);
-        self.write(register_index as u8, line);
+        self.write_bytes(&register_index.to_be_bytes(), line);
         constant.write_bytes(self, line)
     }
 
-    pub fn write_jump_if_false_placeholder(&mut self, register_index: u8, line: i32) -> usize {
+    pub fn write_jump_if_false_placeholder(&mut self, register_index: register_index_type, line: line_type) -> Result<usize, EvaluateError> {
         self.write_instruction(Instructions::JumpIfFalse, line);
-        self.write(register_index as u8, line);
+        self.write_bytes(&register_index.to_be_bytes(), line);
         let return_val = self.chunk.code.len();
-        self.write(0xFF as u8, line);
-        self.write(0xFF as u8, line);
-        return_val
+        let current_offset: instruction_length_type = self.chunk.code.len().try_into().map_err(|_| EvaluateError {
+            error: crate::value::EvaluateErrorDetails::CodeTooLong,
+            line: line,
+        })?;
+
+        let values = current_offset.to_be_bytes();
+
+        for _ in 0..values.len() {
+            self.write(0xFF as u8, line);
+
+        }
+        Ok(return_val)
+
     }
 
-    pub fn write_jump_placeholder(&mut self, line: i32) -> usize {
+    pub fn write_jump_placeholder(&mut self, line: line_type) -> Result<usize, EvaluateError> {
         self.write_instruction(Instructions::Jump, line);
         let return_val = self.chunk.code.len();
-        self.write(0xFF as u8, line);
-        self.write(0xFF as u8, line);
-        return_val
+        let current_offset: instruction_length_type = self.chunk.code.len().try_into().map_err(|_| EvaluateError {
+            error: crate::value::EvaluateErrorDetails::CodeTooLong,
+            line: line,
+        })?;
+        let values = current_offset.to_be_bytes();
+
+        for _ in 0..values.len() {
+            self.write(0xFF as u8, line);
+        }
+
+        Ok(return_val)
     }
 
-    pub fn write_goto(&mut self, position: u16, line: i32) {
+    pub fn write_goto(&mut self, position: instruction_length_type, line: line_type) {
         self.write_instruction(Instructions::Jump, line);
-        let values: [u8; 2] = position.to_be_bytes(); // IT IS NOW DECIDED THAT WE USE BIG ENDIAN LMAO
-        self.write(values[0], line);
-        self.write(values[1], line);
+        let values = position.to_be_bytes();
+        self.write_bytes(&values, line);
     }
 
-    pub fn update_jump(&mut self, index: usize) -> Result<(), TryFromIntError> {
-        let current_offset: u16 = self.chunk.code.len().try_into()?;
-        let values: [u8; 2] = current_offset.to_be_bytes(); // IT IS NOW DECIDED THAT WE USE BIG ENDIAN LMAO
-        self.chunk.code[index] = values[0];
-        self.chunk.code[index + 1] = values[1];
+    pub fn update_jump(&mut self, index: usize) -> Result<(), EvaluateError> {
+        let current_offset: instruction_length_type = self.chunk.code.len().try_into().map_err(|_| EvaluateError {
+            error: crate::value::EvaluateErrorDetails::CodeTooLong,
+            line: 0,
+        })?;
+        let values = current_offset.to_be_bytes();
+        for i in 0..values.len() {
+            self.chunk.code[index + i] = values[i];
+        }
         Ok(())
     }
 
-    pub fn write_print(&mut self, register_index: u8, line: i32) {
+    pub fn write_print(&mut self, register_index: register_index_type, line: line_type) {
         self.write_instruction(Instructions::Print, line);
-        self.write(register_index as u8, line);
+        self.write_bytes(&register_index.to_be_bytes(), line);
     }
 
-    pub fn declare_variable(&mut self, name: &'a str, line: i32) -> Result<(), ()> {
+    pub fn declare_variable(&mut self, name: &'a str, line: line_type) -> Result<(), ()> {
         if self.scope_depth == 0 && !self.enclosing.is_some() {
             self
                 .get_or_write_constant(Value::String(name), line);
@@ -175,7 +203,7 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    pub fn declare_function(&mut self, name: &'a str, line: i32)  {
+    pub fn declare_function(&mut self, name: &'a str, line: line_type)  {
         if self.scope_depth == 0 && !self.enclosing.is_some() {
             self
                 .get_or_write_constant(Value::String(name), line);
@@ -188,79 +216,84 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    pub fn write_declare_global(&mut self, ident: Varint, value_register: u8, line: i32) -> usize {
+    pub fn write_declare_global(&mut self, ident: Varint, value_register: register_index_type, line: line_type) -> usize {
         self.write_instruction(Instructions::DefineGlobal, line);
-        self.write(value_register as u8, line);
+        self.write_bytes(&value_register.to_be_bytes(), line);
         ident.write_bytes(self, line)
     }
 
-    pub fn write_declare_local(&mut self, value_register: u8, line: i32) {
+    pub fn write_declare_local(&mut self, value_register: register_index_type, line: line_type) {
         let last = self.locals.last_mut().unwrap();
         last.depth = self.scope_depth;
         self.write_instruction(Instructions::DefineLocal, line);
-        self.write(value_register as u8, line);
+        self.write_bytes(&value_register.to_be_bytes(), line);
     }
 
-    pub fn write_get_local(&mut self, output_register: u8, slot: u16, line: i32) {
+    pub fn write_get_local(&mut self, output_register: register_index_type, slot: stack_index_type, line: line_type) {
         self.write_instruction(Instructions::GetLocal, line);
-        self.write(output_register as u8, line);
-
-        let slot: [u8; 2] = slot.to_be_bytes(); // IT IS NOW DECIDED THAT WE USE BIG ENDIAN LMAO
-
-        self.write(slot[0] as u8, line);
-        self.write(slot[1] as u8, line);
+        self.write_bytes(&output_register.to_be_bytes(), line);
+        self.write_bytes(&slot.to_be_bytes(), line);
 
     }
 
-    pub fn write_get_upvalue(&mut self, output_register: u8, slot: u16, line: i32) {
+    pub fn write_get_upvalue(&mut self, output_register: register_index_type, slot: stack_index_type, line: line_type) {
         self.write_instruction(Instructions::GetUpvalue, line);  // ← Fix this
-        self.write(output_register as u8, line);
-        let slot: [u8; 2] = slot.to_be_bytes();
-        self.write(slot[0] as u8, line);
-        self.write(slot[1] as u8, line);
+        self.write_bytes(&output_register.to_be_bytes(), line);
+        self.write_bytes(&slot.to_be_bytes(), line);
+
     }
 
-    pub fn write_set_upvalue(&mut self, input_register: u8, slot: u16, line: i32) {
+    pub fn write_set_upvalue(&mut self, input_register: register_index_type, slot: stack_index_type, line: line_type) {
         self.write_instruction(Instructions::SetUpvalue, line);  // ← Fix this
-        self.write(input_register as u8, line);
-        let slot: [u8; 2] = slot.to_be_bytes();
-        self.write(slot[0] as u8, line);
-        self.write(slot[1] as u8, line);
+        self.write_bytes(&input_register.to_be_bytes(), line);
+        self.write_bytes(&slot.to_be_bytes(), line);
+
     }
 
-    pub fn write_set_local(&mut self, input_register: u8, slot: u16, line: i32) {
+    pub fn write_set_local(&mut self, input_register: register_index_type, slot: stack_index_type, line: line_type) {
         self.write_instruction(Instructions::SetLocal, line);
-        self.write(input_register as u8, line);
-        let slot: [u8; 2] = slot.to_be_bytes(); // IT IS NOW DECIDED THAT WE USE BIG ENDIAN LMAO
+        self.write_bytes(&input_register.to_be_bytes(), line);
+        self.write_bytes(&slot.to_be_bytes(), line);
 
-        self.write(slot[0] as u8, line);
-        self.write(slot[1] as u8, line);
     }
 
 
 
-    pub fn write_set_global(&mut self, ident: Varint, value_register: u8, line: i32) {
+    pub fn write_set_global(&mut self, ident: Varint, value_register: register_index_type, line: line_type) {
         self.write_instruction(Instructions::SetGlobal, line);
-        self.write(value_register as u8, line);
+        self.write_bytes(&value_register.to_be_bytes(), line);
         ident.write_bytes(self, line);
     }
 
-    pub fn write_get_global(&mut self, ident: Varint, dst_register: u8, line: i32) -> usize {
+    pub fn write_get_global(&mut self, ident: Varint, dst_register: register_index_type, line: line_type) -> usize {
         self.write_instruction(Instructions::GetGlobal, line);
-        self.write(dst_register as u8, line);
+        self.write_bytes(&dst_register.to_be_bytes(), line);
         ident.write_bytes(self, line)
     }
 
-    pub fn write_function_return(&mut self, line: i32) {
+    pub fn write_get_field(&mut self, ident: Varint, dst_register: register_index_type, line: line_type) -> usize {
+        self.write_instruction(Instructions::GetField, line);
+        self.write_bytes(&dst_register.to_be_bytes(), line);
+        ident.write_bytes(self, line)
+    }
+
+    pub fn write_set_field(&mut self, ident: Varint, value_register: register_index_type, dst_register: register_index_type, line: line_type) -> usize {
+        self.write_instruction(Instructions::SetField, line);
+        self.write_bytes(&value_register.to_be_bytes(), line);
+        self.write_bytes(&dst_register.to_be_bytes(), line);
+        ident.write_bytes(self, line)
+    }
+
+    pub fn write_function_return(&mut self, line: line_type) {
         self.write_instruction(Instructions::FunctionReturn, line);
     }
 
-    pub fn write_stack_push(&mut self, line: i32) {
+    pub fn write_stack_push(&mut self, line: line_type) {
         self.scope_depth += 1;
         self.write_instruction(Instructions::PushStack, line);
     }
 
-    pub fn write_stack_pop(&mut self, line: i32) {
+    pub fn write_stack_pop(&mut self, line: line_type) {
         while let Some(local) = self.locals.last() {
             if local.depth < self.scope_depth {
                 break;
@@ -282,9 +315,9 @@ impl<'a> Compiler<'a> {
 
 
 
-    pub fn write_fn_call(&mut self, fn_register: u8, num_args: u8, line: i32) {
+    pub fn write_fn_call(&mut self, fn_register: register_index_type, num_args: u8, line: line_type) {
         self.write_instruction(Instructions::FunctionCall, line);
-        self.write(fn_register, line);
+        self.write_bytes(&fn_register.to_be_bytes(), line);
         self.write(num_args, line);
 
     }
@@ -293,13 +326,14 @@ impl<'a> Compiler<'a> {
     pub fn write_unary(
         &mut self,
         byte: Instructions,
-        register_index: u8,
-        dst_register_index: u8,
-        line: i32,
+        register_index: register_index_type,
+        dst_register_index: register_index_type,
+        line: line_type,
     ) {
         self.write(byte as u8, line);
-        self.write(register_index as u8, line);
-        self.write(dst_register_index as u8, line);
+        self.write_bytes(&register_index.to_be_bytes(), line);
+        self.write_bytes(&dst_register_index.to_be_bytes(), line);
+
     }
 
     pub fn disassemble(&self, name: &str) {
@@ -308,7 +342,7 @@ impl<'a> Compiler<'a> {
         let mut previous = i;
         while i < self.chunk.code.len() {
             let tmp = i;
-            i = disassemble_instruction(&self.chunk, i, previous);
+            i = disassemble_instruction(Rc::new(self.chunk.clone()), i, previous);
             previous = tmp;
         }
     }
@@ -350,7 +384,7 @@ impl<'a> Compiler<'a> {
         return Ok(ResolvedVar::Global(global))
     }
 
-    fn resolve_full_upvalue(&mut self, name: &str) -> Option<u16> {
+    fn resolve_full_upvalue(&mut self, name: &str) -> Option<stack_index_type> {
         let mut enclosing = self.enclosing.as_mut()?.borrow_mut();
 
         if let Some((slot, local)) = enclosing.resolve_local(name).unwrap() {
@@ -376,7 +410,7 @@ impl<'a> Compiler<'a> {
         None
     }
 
-    fn resolve_predeclared_upvalue(&mut self, name: &str) -> Option<u16> {
+    fn resolve_predeclared_upvalue(&mut self, name: &str) -> Option<stack_index_type> {
         let mut enclosing = self.enclosing.as_mut()?.borrow_mut();
 
         if let Some((slot, _)) = enclosing.resolve_local(name).unwrap() {
@@ -394,10 +428,10 @@ impl<'a> Compiler<'a> {
         None
     }
 
-    fn resolve_local(&mut self, name: &str) -> Result<Option<(u16, Local)>, ParserError> {
+    fn resolve_local(&mut self, name: &str) -> Result<Option<(stack_index_type, Local)>, ParserError> {
         for (i, local) in self.locals.iter().enumerate().rev() {
             if local.name == name && local.depth != -1 {
-                return Ok(Some((i as u16, local.clone())));
+                return Ok(Some((i as stack_index_type, local.clone())));
             }
             if local.name == name && local.depth == -1 {
                 return Err(ParserError {
@@ -410,22 +444,22 @@ impl<'a> Compiler<'a> {
         Ok(None)
     }
 
-    pub fn add_upvalue(&mut self, is_local: bool, index: u16) -> u16 {
+    pub fn add_upvalue(&mut self, is_local: bool, index: stack_index_type) -> stack_index_type {
         // check if this upvalue already exists
         for (i, up) in self.upvalues.iter().enumerate() {
             if up.is_local == is_local && up.index == index {
-                return i as u16; // reuse existing upvalue
+                return i as stack_index_type; // reuse existing upvalue
             }
         }
 
         // otherwise, add new upvalue
         self.upvalues.push(UpvalueDesc { is_local, index });
-        (self.upvalues.len() - 1) as u16
+        (self.upvalues.len() - 1) as stack_index_type
     }
 
-    pub fn write_closure(&mut self, dst_reg: u8, constant: Varint, upvalues: &[UpvalueDesc], line: i32) {
+    pub fn write_closure(&mut self, dst_reg: register_index_type, constant: Varint, upvalues: &[UpvalueDesc], line: line_type) {
         self.write_instruction(Instructions::Closure, line);
-        self.write(dst_reg, line);
+        self.write_bytes(&dst_reg.to_be_bytes(), line);
 
         // Write the constant index as varint
         constant.write_bytes(self, line);
@@ -438,10 +472,8 @@ impl<'a> Compiler<'a> {
             // Write whether it's a local (1) or inherited from parent (0)
             self.write(if upvalue.is_local { 1 } else { 0 }, line);
 
-            // Write the index as u16 (big endian to match your other code)
             let index_bytes = upvalue.index.to_be_bytes();
-            self.write(index_bytes[0], line);
-            self.write(index_bytes[1], line);
+            self.write_bytes(&index_bytes, line);
         }
     }
 }

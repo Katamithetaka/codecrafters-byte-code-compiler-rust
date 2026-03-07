@@ -1,11 +1,12 @@
-use std::{fmt::Display, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 
-use crate::{compiler::{compiler::Compiler, varint::Varint}, value::class::{self, Class}};
+use crate::value::{Value, class::Class};
 
 /// Represents the internal details of a function, including its name, starting position, and argument count.
 #[derive(Clone, Debug)]
 pub struct ClassInstanceInner {
-    pub class: Class
+    pub class: Class,
+    pub fields: RefCell<HashMap<String, Value<String>>>
 }
 
 /// Represents a user-defined function in the interpreter.
@@ -33,7 +34,21 @@ impl ClassInstance {
         Self {
             inner: Rc::new(ClassInstanceInner {
                 class,
+                fields: RefCell::new(HashMap::new()),
             }),
         }
+    }
+
+    pub fn get_field(&self, field_name: &str) -> Value<String> {
+        match self.inner.fields.borrow().get(field_name) {
+            Some(v) => v.clone(),
+            None => Value::Null,
+        }
+    }
+
+    pub fn set_field(&mut self, field_name: String, value: Value<String>) {
+        let value = value.into_cell();
+
+        self.inner.fields.borrow_mut().entry(field_name).and_modify(|c| *c = value.clone()).or_insert(value.clone());
     }
 }

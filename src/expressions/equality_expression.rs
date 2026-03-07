@@ -1,7 +1,7 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
-    compiler::{CodeGenerator, compiler::Compiler, instructions::Instructions},
+    compiler::{CodeGenerator, compiler::Compiler, instructions::Instructions, int_types::{line_type, register_index_type}},
     expressions::{Expression, Expressions},
 };
 
@@ -25,7 +25,7 @@ pub struct EqualityExpression<'a> {
     pub lhs: Box<Expressions<'a>>,
     pub rhs: Box<Expressions<'a>>,
     pub op: EqualityOp,
-    line_number: usize,
+    line_number: line_type,
 }
 
 impl<'a> Display for EqualityExpression<'a> {
@@ -46,7 +46,7 @@ impl<'a> EqualityExpression<'a> {
 }
 
 impl<'a> Expression<'a> for EqualityExpression<'a> {
-    fn line_number(&self) -> usize {
+    fn line_number(&self) -> line_type{
         self.line_number
     }
 }
@@ -55,8 +55,8 @@ impl<'a> CodeGenerator<'a> for EqualityExpression<'a> {
     fn write_expression(
         &mut self,
         chunk: Rc<RefCell<Compiler<'a>>>,
-        dst_register: Option<u8>,
-        reserved_registers: Vec<u8>,
+        dst_register: Option<register_index_type>,
+        reserved_registers: Vec<register_index_type>
     ) -> crate::compiler::Result {
         let instruction = match self.op {
             EqualityOp::EqualEqual => Instructions::Eq,

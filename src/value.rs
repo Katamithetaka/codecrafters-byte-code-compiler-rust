@@ -1,11 +1,11 @@
-pub mod function;
+pub mod callable;
 pub mod class;
 pub mod class_instance;
 
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use crate::value::{class::Class, class_instance::ClassInstance};
-pub use crate::{prelude::EvaluateErrorDetails, value::function::{Closure, Function, GlobalFunction}};
+use crate::{value::{class::Class, class_instance::ClassInstance}};
+pub use crate::{prelude::EvaluateErrorDetails, value::callable::{Closure, Function, GlobalFunction}};
 
 
 
@@ -21,7 +21,7 @@ pub enum Value<S> {
     /// A boolean value.
     Boolean(bool),
     /// A user-defined function.
-    Function(Function),
+    Function(Function<String>),
     /// A global function.
     GlobalFunction(GlobalFunction),
     /// A reference-counted, mutable value.
@@ -60,6 +60,7 @@ impl<S> Value<S> {
         match self {
             Value::Null => false,
             Value::Boolean(v) => *v,
+            Value::Cell(c) => c.borrow().is_truthy(),
             _ => true,
         }
     }
@@ -130,8 +131,17 @@ impl<S: ToString> Value<S> {
         self.as_number().map_err(|_| EvaluateErrorDetails::BinaryNumberOp)
     }
 
+    pub fn as_add_op(&self) -> Result<Value<String>, EvaluateErrorDetails> {
+        match self {
+            Value::Number(f) => Ok(Value::Number(f.clone())),
+            Value::String(f) => Ok(Value::String(f.to_string())),
+            Value::Cell(c) => c.borrow().as_add_op(),
+            _ => return Err(EvaluateErrorDetails::UnmatchedTypes),
+        }
+    }
+
     /// Recursively unwrap a function
-    pub fn as_function(&self) -> Result<Function, EvaluateErrorDetails> {
+    pub fn as_function(&self) -> Result<Function<String>, EvaluateErrorDetails> {
         match self {
             Value::Function(f) => Ok(f.clone()),
             Value::Cell(cell) => cell.borrow().as_function(), // recursive unwrap
@@ -144,6 +154,15 @@ impl<S: ToString> Value<S> {
         match self {
             Value::GlobalFunction(f) => Ok(f.clone()),
             Value::Cell(cell) => cell.borrow().as_global_function(), // recursive unwrap
+            _ => Err(EvaluateErrorDetails::ExpectedFunction),
+        }
+    }
+
+    /// Recursively unwrap a global function
+    pub fn as_class_instance(&self) -> Result<ClassInstance, EvaluateErrorDetails> {
+        match self {
+            Value::Instance(f) => Ok(f.clone()),
+            Value::Cell(cell) => cell.borrow().as_class_instance(), // recursive unwrap
             _ => Err(EvaluateErrorDetails::ExpectedFunction),
         }
     }

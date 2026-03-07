@@ -1,8 +1,8 @@
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc};
 
 use crate::{
     compiler::{
-        instructions::disassemble_instruction, varint::Varint
+        instructions::disassemble_instruction, int_types::line_type, varint::Varint
     },
     expressions::Value,
 };
@@ -11,8 +11,12 @@ use crate::{
 pub struct Chunk<S> {
     pub code: Vec<u8>,
     pub constants: Vec<Value<S>>,
-    pub lines: Vec<(i32, usize)>,
+    pub lines: Vec<(line_type, usize)>,
 }
+
+
+
+
 
 impl<S> Chunk<S> {
     pub fn new() -> Self {
@@ -28,7 +32,7 @@ impl<S> Chunk<S> {
         return Varint((self.constants.len() - 1) as u32);
     }
 
-    pub fn write(&mut self, byte: u8, line: i32) {
+    pub fn write(&mut self, byte: u8, line: line_type) {
         let line_v = self.lines.last_mut();
         match line_v {
             Some(a) if a.0 == line => a.1 += 1,
@@ -39,7 +43,7 @@ impl<S> Chunk<S> {
     }
 
 
-    pub fn get_line(&self, offset: usize) -> i32 {
+    pub fn get_line(&self, offset: usize) -> line_type {
         let mut i = 0;
         let mut line_index = 0;
         while i < offset {
@@ -55,13 +59,13 @@ impl<S> Chunk<S> {
         return self.lines[line_index].0;
     }
 
-    pub fn disassemble(&self, name: &str) where S: Display {
+    pub fn disassemble(self: Rc<Chunk<S>>, name: &str) where S: Display {
         eprintln!("== {} ==", name);
         let mut i = 0;
         let mut previous = i;
         while i < self.code.len() {
             let tmp = i;
-            i = disassemble_instruction(self, i, previous);
+            i = disassemble_instruction(Rc::clone(&self), i, previous);
             previous = tmp;
         }
     }

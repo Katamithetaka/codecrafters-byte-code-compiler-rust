@@ -1,8 +1,8 @@
 use std::{fmt::Display, iter::Peekable};
 
 use crate::{
-    Token, expressions::{
-        Expressions, assignment_expression::AssignmentExpression, binary_expression::{BinaryExpression, BinaryOp}, call_expression::CallExpression, equality_expression::{EqualityExpression, EqualityOp}, group::Group, identifier::Identifier, logical_expression::{LogicalExpression, LogicalOp}, relation_expression::{RelationalExpression, RelationalOp}, unary_expression::{UnaryExpression, UnaryOp}
+    Token, compiler::int_types::line_type, expressions::{
+        Expressions, assignment_expression::AssignmentExpression, binary_expression::{BinaryExpression, BinaryOp}, call_expression::CallExpression, equality_expression::{EqualityExpression, EqualityOp}, get_expression::GetExpression, group::Group, identifier::Identifier, logical_expression::{LogicalExpression, LogicalOp}, relation_expression::{RelationalExpression, RelationalOp}, set_expression::SetExpression, unary_expression::{UnaryExpression, UnaryOp}
     }, prelude::ClassDeclareStatement, scanner::{Keyword, TokenKind}, statements::{
         Statements, block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement, print_statement::PrintStatement, return_statement::ReturnStatement, while_statements::WhileStatement
     }
@@ -33,7 +33,7 @@ pub struct ParserError {
     /// The specific details of the parsing error.
     pub error: ParserErrorDetails,
     /// The line number where the error occurred.
-    pub line: usize,
+    pub line: line_type,
 }
 
 impl Display for ParserError {
@@ -135,8 +135,8 @@ impl<'a> AstParser<'a> {
             .unwrap_or(self.state.tokens.last().as_ref().unwrap());
     }
 
-    pub fn line_number(&mut self) -> usize {
-        self.peek_or_last().line
+    pub fn line_number(&mut self) -> line_type {
+        self.peek_or_last().line as line_type
     }
 
     pub fn token_kind(&mut self) -> TokenKind {
@@ -153,7 +153,7 @@ impl<'a> AstParser<'a> {
     pub fn error<T>(&mut self, error: ParserErrorDetails) -> Result<T, ParserError> {
         return Err(ParserError {
             error,
-            line: self.line_number(),
+            line: self.line_number() as line_type,
         });
     }
 
@@ -196,6 +196,9 @@ impl<'a> AstParser<'a> {
             match expr {
                 Expressions::Identifier(ident) => {
                     return Ok(AssignmentExpression::new(ident, Box::new(right)).into());
+                }
+                Expressions::GetExpression(expression) => {
+                    return Ok(SetExpression::new(expression, Box::new(right)).into());
                 }
                 _ => {
                     return self.error(ParserErrorDetails::InvalidAssignementTarget);
@@ -292,17 +295,28 @@ impl<'a> AstParser<'a> {
 
     pub fn call(&mut self) -> Result<Expressions<'a>, ParserError> {
         let mut expr = self.primary()?;
-        while self.token_kind() == TokenKind::LeftParen {
-            self.advance();
-            let mut arguments = vec![];
-            while self.token_kind() != TokenKind::RightParen {
-                arguments.push(self.expression()?);
-                if self.token_kind() != TokenKind::RightParen {
-                    self.consume(TokenKind::Comma)?;
+        loop {
+            if self.token_kind() == TokenKind::LeftParen {
+                self.advance();
+                let mut arguments = vec![];
+                while self.token_kind() != TokenKind::RightParen {
+                    arguments.push(self.expression()?);
+                    if self.token_kind() != TokenKind::RightParen {
+                        self.consume(TokenKind::Comma)?;
+                    }
                 }
+                self.consume(TokenKind::RightParen)?;
+                expr = CallExpression::new(Box::new(expr), arguments).into();
             }
-            self.consume(TokenKind::RightParen)?;
-            expr = CallExpression::new(Box::new(expr), arguments).into();
+            else if self.token_kind() == TokenKind::Dot {
+                self.advance();
+                let identifier = self.identifier()?;
+                expr = GetExpression::new(Box::new(expr), identifier).into();
+
+            }
+            else {
+                break;
+            }
         };
 
         Ok(expr.into())
@@ -375,7 +389,7 @@ impl<'a> AstParser<'a> {
             None
         };
         self.consume(TokenKind::Semicolon)?;
-        let statement = ReturnStatement::new(expr, self.line_number());
+        let statement = ReturnStatement::new(expr, self.line_number() as line_type);
         Ok(statement)
     }
 

@@ -1,8 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    compiler::{CodeGenerator, compiler::Compiler},
-    expressions::{EvaluateError, EvaluateErrorDetails, Expression, Expressions},
+    compiler::{CodeGenerator, compiler::Compiler, int_types::{instruction_length_type, register_index_type}},
+    expressions::{Expression, Expressions},
     statements::{Statement, Statements},
 };
 
@@ -30,8 +30,8 @@ impl<'a> CodeGenerator<'a> for WhileStatement<'a> {
     fn write_expression(
         &mut self,
         chunk: Rc<RefCell<Compiler<'a>>>,
-        dst_register: Option<u8>,
-        reserved_registers: Vec<u8>,
+        dst_register: Option<register_index_type>,
+        reserved_registers: Vec<register_index_type>
     ) -> crate::compiler::Result {
         let dst = self.dst_or_default(dst_register, &reserved_registers);
         let loop_offset = {
@@ -44,24 +44,16 @@ impl<'a> CodeGenerator<'a> for WhileStatement<'a> {
         let offset = {
             let mut chunk = chunk.borrow_mut();
 
-            chunk.write_jump_if_false_placeholder(dst, self.expression.line_number() as i32)
+            chunk.write_jump_if_false_placeholder(dst, self.expression.line_number())?
         };
 
         self.statement
             .write_expression(chunk.clone(), Some(dst), reserved_registers.clone())?;
         let mut chunk = chunk.borrow_mut();
 
-        chunk.write_goto(loop_offset as u16, self.expression.line_number() as i32);
+        chunk.write_goto(loop_offset as instruction_length_type, self.expression.line_number());
 
-        match chunk.update_jump(offset) {
-            Ok(_) => {}
-            Err(_) => {
-                return Err(EvaluateError {
-                    error: EvaluateErrorDetails::CodeTooLong,
-                    line: self.expression.line_number(),
-                });
-            }
-        }
+        chunk.update_jump(offset)?;
 
         Ok(())
     }

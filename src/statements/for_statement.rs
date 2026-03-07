@@ -1,8 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    compiler::{CodeGenerator, compiler::Compiler},
-    expressions::{EvaluateError, EvaluateErrorDetails, Expressions, Value},
+    compiler::{CodeGenerator, compiler::Compiler, int_types::{instruction_length_type, line_type, register_index_type}},
+    expressions::{ Expressions, Value},
     statements::{Statement, Statements},
 };
 
@@ -13,8 +13,8 @@ pub struct ForStatement<'a> {
     pub test: Option<Expressions<'a>>,
     pub inc: Option<Expressions<'a>>,
     pub statement: Box<Statements<'a>>,
-    pub begin_line: usize,
-    pub end_line: usize,
+    pub begin_line: line_type,
+    pub end_line: line_type,
 }
 
 impl ForStatement<'_> {
@@ -23,8 +23,8 @@ impl ForStatement<'_> {
         test: Option<Expressions<'a>>,
         inc: Option<Expressions<'a>>,
         statement: Box<Statements<'a>>,
-        begin_line: usize,
-        end_line: usize,
+        begin_line: line_type,
+        end_line: line_type,
     ) -> ForStatement<'a> {
         ForStatement {
             variable_declare,
@@ -43,11 +43,11 @@ impl<'a> CodeGenerator<'a> for ForStatement<'a> {
     fn write_expression(
         &mut self,
         chunk: Rc<RefCell<Compiler<'a>>>,
-        dst_register: Option<u8>,
-        reserved_registers: Vec<u8>,
+        dst_register: Option<register_index_type>,
+        reserved_registers: Vec<register_index_type>
     ) -> crate::compiler::Result {
 
-        chunk.borrow_mut().write_stack_push(self.begin_line as i32);
+        chunk.borrow_mut().write_stack_push(self.begin_line as line_type);
 
         let dst = self.dst_or_default(dst_register, &reserved_registers);
         self.variable_declare.as_mut().map(|d| d.write_expression(chunk.clone(), Some(dst), reserved_registers.clone()));
@@ -55,36 +55,25 @@ impl<'a> CodeGenerator<'a> for ForStatement<'a> {
         match self.test.as_mut() {
             Some(test) => test.write_expression(chunk.clone(), Some(dst), reserved_registers.clone()),
             None => {
-                let constant = chunk.borrow_mut().get_or_write_constant(Value::Boolean(true), self.begin_line as i32);
-                chunk.borrow_mut().write_load(dst, constant, self.begin_line as i32);
+                let constant = chunk.borrow_mut().get_or_write_constant(Value::Boolean(true), self.begin_line as line_type);
+                chunk.borrow_mut().write_load(dst, constant, self.begin_line as line_type);
                 Ok(())
             },
         }?;
         let offset =
-            chunk.borrow_mut().write_jump_if_false_placeholder(dst, self.begin_line as i32);
+            chunk.borrow_mut().write_jump_if_false_placeholder(dst, self.begin_line as line_type)?;
 
         self.statement
             .write_expression(chunk.clone(), Some(dst), reserved_registers.clone())?;
 
         self.inc.as_mut().map(|d| d.write_expression(chunk.clone(), Some(dst), reserved_registers.clone()));
 
-        chunk.borrow_mut().write_goto(loop_offset as u16, self.end_line as i32);
+        chunk.borrow_mut().write_goto(loop_offset as instruction_length_type, self.end_line as line_type);
 
         let mut r = chunk.borrow_mut();
-        match r.update_jump(offset) {
-            Ok(_) => {
-                drop(r);
-                chunk.borrow_mut().write_stack_pop(self.end_line as i32);
+        r.update_jump(offset)?;
 
-            }
-            Err(_) => {
-                return Err(EvaluateError {
-                    error: EvaluateErrorDetails::CodeTooLong,
-                    line: self.begin_line,
-                });
-            }
-        }
-
+        r.write_stack_pop(self.end_line as line_type);
         Ok(())
     }
 }
