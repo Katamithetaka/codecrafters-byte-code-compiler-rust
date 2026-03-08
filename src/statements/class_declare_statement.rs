@@ -35,15 +35,21 @@ impl<'a> CodeGenerator<'a> for ClassDeclareStatement<'a> {
         let dst_reg = self.dst_or_default(dst, &reserved_registers);
 
 
-        match compiler.borrow_mut().declare_variable(self.ident.token, self.ident.line as line_type) {
-            Ok(_) => {},
-            Err(_) => {
-                Err(ParserError {
-                    error: crate::ast_parser::ParserErrorDetails::VariableRedeclaration,
-                    line: self.ident.line,
-                })?
+        compiler.borrow_mut().declare_function(self.ident.token, self.ident.line as line_type);
+        compiler.borrow_mut().mark_declared(self.ident.token.to_string());
+
+        let mut c = compiler.borrow_mut();
+        match c.resolve_variable(self.ident.token)? {
+            ResolvedVar::Local(_) => {
+                c.write_declare_local(0, self.ident.line as line_type);
+
             },
+            ResolvedVar::Global(varint) => {
+                c.write_declare_global(varint, dst_reg, self.ident.line as line_type);
+            },
+            ResolvedVar::Upvalue(_) => unreachable!(),
         }
+        drop(c);
 
         let constant = compiler.borrow_mut().add_constant(Value::Null);
 
@@ -75,15 +81,15 @@ impl<'a> CodeGenerator<'a> for ClassDeclareStatement<'a> {
 
         let mut compiler = compiler.borrow_mut();
 
-        match compiler.resolve_variable(self.ident.token) {
-            Ok(ResolvedVar::Local(_)) | Err(_) => {
-                compiler.write_declare_local(dst_reg, self.ident.line as line_type);
-            },
-            Ok(ResolvedVar::Global(varint)) => {
-                compiler.write_declare_global(varint, dst_reg, self.ident.line as line_type);
-            },
-            Ok(ResolvedVar::Upvalue(_)) => unreachable!(),
+        match compiler.resolve_variable(self.ident.token)? {
+                ResolvedVar::Local(slot) => {
+                    compiler.write_set_local(dst_reg, slot, self.ident.line as line_type);
+                },
+                ResolvedVar::Global(varint) => compiler.write_set_global(varint, dst_reg, self.ident.line as line_type),
+                ResolvedVar::Upvalue(_) => unreachable!(),
         }
+
+
 
 
 

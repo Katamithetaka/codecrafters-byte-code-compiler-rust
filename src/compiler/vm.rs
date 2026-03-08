@@ -638,7 +638,7 @@ pub fn execute_instruction(
                 }
                 Value::GlobalFunction(_) => {},
 
-                _ => {
+                a => {
                     return Err(InterpretError::InvalidIdentifierType)
                 }
 

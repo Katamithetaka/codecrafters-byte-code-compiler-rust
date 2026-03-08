@@ -1,16 +1,11 @@
-class Confused {
-  init(a) {
-    this.feeling = a;
-  }
+{
+   class Foo {
+     returnSelf() {
+       // Should be able to return the class itself
+       return Foo;
+     }
+   }
 
-  method() {
-    fun inner(instance) {
-      print this.feeling;
-    }
-    return inner;
-  }
-}
-
-var instance = Confused(1);
-var m = instance.method();
-m(instance);
+   // Calling a method on an instance should work
+   print Foo().returnSelf();
+ }
