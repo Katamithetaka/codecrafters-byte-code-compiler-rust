@@ -1,13 +1,16 @@
 class Confused {
+  init(a) {
+    this.feeling = a;
+  }
+
   method() {
     fun inner(instance) {
-      this.feeling = "pizza";
       print this.feeling;
     }
     return inner;
   }
 }
 
-var instance = Confused();
+var instance = Confused(1);
 var m = instance.method();
 m(instance);
