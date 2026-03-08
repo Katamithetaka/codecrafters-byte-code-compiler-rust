@@ -1,6 +1,6 @@
 use std::{cell::RefCell,  rc::Rc};
 
-use crate::{ParserError, compiler::{instructions::{Instructions, disassemble_instruction}, int_types::{instruction_length_type, line_type, register_index_type, stack_index_type}, varint::Varint}, expressions::Value, prelude::{Chunk, EvaluateError}};
+use crate::{ParserError, compiler::{instructions::{Instructions, disassemble_instruction}, int_types::{instruction_length_type, line_type, register_index_type, stack_index_type}, varint::Varint}, expressions::Value, prelude::{Chunk, EvaluateError}, value::callable::FunctionKind};
 
 #[allow(unused)]
 #[derive(Debug, Clone)]
@@ -27,6 +27,7 @@ pub struct Compiler<'a> {
 
     pub scope_depth: i32,
     pub enclosing: Option<Rc<RefCell<Compiler<'a>>>>,
+    pub function_kind: Option<FunctionKind>,
     globals: Option<Vec<String>>
 }
 
@@ -44,23 +45,32 @@ impl<'a> Compiler<'a> {
             upvalues: Vec::new(),
             scope_depth: 0,
             enclosing: None,
-            globals: Some(Vec::new())
+            globals: Some(Vec::new()),
+            function_kind: None
         }))
     }
 
-    pub fn with_parent(compiler: Rc<RefCell<Compiler<'a>>>) -> Rc<RefCell<Self>> {
+    pub fn with_parent(compiler: Rc<RefCell<Compiler<'a>>>, function_kind: FunctionKind) -> Rc<RefCell<Self>> {
         let compiler = Compiler {
             chunk: Chunk::new(),
             locals: Vec::new(),
             upvalues: Vec::new(),
             scope_depth: 0,
             enclosing: Some(compiler),
-            globals: None
+            globals: None,
+            function_kind: Some(function_kind)
         };
 
 
 
         Rc::new(RefCell::new(compiler))
+    }
+
+    pub fn is_in_method(&self) -> bool {
+        match self.function_kind {
+            Some(c) => c == FunctionKind::Method || self.enclosing.as_ref().unwrap().borrow().is_in_method(),
+            None => false,
+        }
     }
 
     fn add_global(&mut self, name: String) {

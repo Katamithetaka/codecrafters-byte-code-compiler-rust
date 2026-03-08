@@ -2,7 +2,7 @@ use std::{fmt::Display, iter::Peekable};
 
 use crate::{
     Token, compiler::int_types::line_type, expressions::{
-        Expressions, assignment_expression::AssignmentExpression, binary_expression::{BinaryExpression, BinaryOp}, call_expression::CallExpression, equality_expression::{EqualityExpression, EqualityOp}, get_expression::GetExpression, group::Group, identifier::Identifier, logical_expression::{LogicalExpression, LogicalOp}, relation_expression::{RelationalExpression, RelationalOp}, set_expression::SetExpression, unary_expression::{UnaryExpression, UnaryOp}
+        Expressions, assignment_expression::AssignmentExpression, binary_expression::{BinaryExpression, BinaryOp}, call_expression::CallExpression, equality_expression::{EqualityExpression, EqualityOp}, get_expression::GetExpression, group::Group, identifier::Identifier, logical_expression::{LogicalExpression, LogicalOp}, relation_expression::{RelationalExpression, RelationalOp}, set_expression::SetExpression, this_expression::This, unary_expression::{UnaryExpression, UnaryOp}
     }, prelude::ClassDeclareStatement, scanner::{Keyword, TokenKind, TokenValue}, statements::{
         Statements, block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement, print_statement::PrintStatement, return_statement::ReturnStatement, while_statements::WhileStatement
     }, value::{Function, Value, callable::FunctionKind}
@@ -63,7 +63,9 @@ pub enum ParserErrorDetails {
     #[error("Variable redeclaration")]
     VariableRedeclaration,
     #[error("Return statement in top-level code")]
-    InvalidReturnStatement
+    InvalidReturnStatement,
+    #[error("This used in top-level code")]
+    InvalidThisUsage
 }
 
 impl<'a> AstParser<'a> {
@@ -369,7 +371,7 @@ impl<'a> AstParser<'a> {
             TokenKind::Keyword(Keyword::Nil) => Ok((Literal::new(self.advance())).into()),
             TokenKind::Keyword(Keyword::This) => {
                 self.advance();
-                Ok(Expressions::Identifier(Identifier {
+                Ok(Expressions::ThisExpression(This {
                     token: "this",
                     line: self.line_number(),
                 }))

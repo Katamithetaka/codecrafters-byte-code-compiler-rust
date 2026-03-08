@@ -3,7 +3,7 @@ use std::{cell::RefCell, fmt::{Debug, Display}, rc::Rc};
 
 use crate::{
     ParserError, compiler::{CodeGenerator, compiler::Compiler, int_types::{line_type, register_index_type}}, expressions::{
-        assignment_expression::AssignmentExpression, binary_expression::BinaryExpression, call_expression::CallExpression, equality_expression::EqualityExpression, get_expression::GetExpression, group::Group, identifier::Identifier, literal::Literal, logical_expression::LogicalExpression, relation_expression::RelationalExpression, set_expression::SetExpression, unary_expression::UnaryExpression
+        assignment_expression::AssignmentExpression, binary_expression::BinaryExpression, call_expression::CallExpression, equality_expression::EqualityExpression, get_expression::GetExpression, group::Group, identifier::Identifier, literal::Literal, logical_expression::LogicalExpression, relation_expression::RelationalExpression, set_expression::SetExpression, this_expression::This, unary_expression::UnaryExpression
     }
 };
 
@@ -31,6 +31,7 @@ pub mod unary_expression;
 pub mod call_expression;
 pub mod get_expression;
 pub mod set_expression;
+pub mod this_expression;
 
 /// The `prelude` module re-exports commonly used types and functions from this module.
 ///
@@ -181,6 +182,8 @@ pub enum Expressions<'a> {
     SetExpression(SetExpression<'a>),
     #[from]
     CallExpression(CallExpression<'a>),
+    #[from]
+    ThisExpression(This<'a>)
 }
 
 impl<'a> Expression<'a> for Expressions<'a> {
@@ -209,7 +212,8 @@ impl<'a> Expression<'a> for Expressions<'a> {
             }
             Expressions::SetExpression(get_expression) => {
                 get_expression.line_number()
-            }
+            },
+            Expressions::ThisExpression(this) => this.line_number(),
         }
     }
 }
@@ -257,6 +261,9 @@ impl<'a> CodeGenerator<'a> for Expressions<'a> {
             }
             Self::SetExpression(get_expression) => {
                 get_expression.write_expression(chunk, dst_register, reserved_registers)
+            }
+            Self::ThisExpression(this) => {
+                this.write_expression(chunk, dst_register, reserved_registers)
             }
         }
     }
