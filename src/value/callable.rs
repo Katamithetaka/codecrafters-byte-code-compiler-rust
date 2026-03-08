@@ -3,7 +3,11 @@ use std::{fmt::Display, rc::Rc};
 use crate::{prelude::Chunk, value::{Value, class_instance::ClassInstance}};
 
 
-
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum FunctionKind {
+    Function,
+    Method,
+}
 
 /// Represents a user-defined function in the interpreter.
 #[derive(Clone, Debug)]
@@ -14,7 +18,8 @@ pub struct Function<T> {
     /// The number of arguments the function takes.
     pub arguments_count: u8,
 
-    pub chunk: Rc<Chunk<T>>
+    pub chunk: Rc<Chunk<T>>,
+    pub function_kind: FunctionKind
 }
 
 impl<T> PartialEq for Function<T> {
@@ -60,11 +65,12 @@ impl PartialEq for GlobalFunction {
 
 
 impl Function<String> {
-    pub fn new(name: String, arguments_count: u8, chunk: Rc<Chunk<String>>) -> Self {
+    pub fn new(name: String, arguments_count: u8, chunk: Rc<Chunk<String>>, function_kind: FunctionKind) -> Self {
         Self {
             name,
             arguments_count,
             chunk,
+            function_kind
         }
     }
 
@@ -78,9 +84,9 @@ impl<T> Display for Function<T> {
 }
 
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum Callable {
     LoxFunction(Closure<String>),
-    GlobalFunction(GlobalFunction),
     BindedLoxFunction(ClassInstance, Closure<String>)
 }
 
@@ -89,7 +95,6 @@ impl Callable {
 
         match self {
             Callable::LoxFunction(closure) => Callable::BindedLoxFunction(instance, closure),
-            Callable::GlobalFunction(_) => panic!("Cannot bind a global function"),
             Callable::BindedLoxFunction(_, closure) => Callable::BindedLoxFunction(instance, closure),
         }
     }

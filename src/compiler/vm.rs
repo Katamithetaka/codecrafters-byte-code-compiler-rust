@@ -4,7 +4,7 @@ use crate::{
     compiler::{
         chunk::Chunk, instructions::{Instructions, disassemble_instruction}, int_types::{instruction_length_type, line_type, register_index_type, stack_index_type, stack_pointer_type, varint_type}, varint::Varint
     },
-    expressions::{EvaluateError, EvaluateErrorDetails}, value::{Closure, class_instance::ClassInstance},
+    expressions::{EvaluateError, EvaluateErrorDetails}, value::{Closure, Function, callable::{Callable, FunctionKind}, class_instance::ClassInstance},
 };
 
 pub use crate::compiler::int_types::VmRead;
@@ -73,6 +73,27 @@ impl Vm {
     pub fn read_stack_index(&mut self) -> stack_index_type {
         return stack_index_type::read_bytes(self);
 
+    }
+
+    pub fn define_local(&mut self, value: Value<String>) -> Result<(), InterpretError> {
+        if DEBUG_TRACE_EXECUTION {
+            eprintln!("Writing local {}", self.stack_index);
+        }
+
+
+        self.stack[self.stack_index as usize] = value;
+
+        self.stack_index = match self.stack_index.checked_add(1) {
+            Some(v) => v,
+            None => return Err(InterpretError::StackOverflow),
+        };
+
+        if (self.stack_index) >= STACK_MAX_SIZE {
+            self.stack_index;
+            return Err(InterpretError::StackOverflow);
+        }
+
+        Ok(())
     }
 
 }
@@ -278,24 +299,13 @@ pub fn execute_instruction(
             };
         }
         Instructions::DefineLocal => {
-            if DEBUG_TRACE_EXECUTION {
-                eprintln!("Writing local {}", vm.stack_index);
-            }
+
 
             let register = vm.read_register();
 
             let register_v = std::mem::replace(&mut vm.registers[register as usize], Value::Null);
-            vm.stack[vm.stack_index as usize] = register_v;
+            vm.define_local(register_v)?;
 
-            vm.stack_index = match vm.stack_index.checked_add(1) {
-                Some(v) => v,
-                None => return Err(InterpretError::StackOverflow),
-            };
-
-            if (vm.stack_index) >= STACK_MAX_SIZE {
-                vm.stack_index;
-                return Err(InterpretError::StackOverflow);
-            }
         }
         Instructions::GetLocal => {
             let output_register = vm.read_register();
@@ -365,13 +375,19 @@ pub fn execute_instruction(
                     return Err(EvaluateErrorDetails::InvalidArgCount);
                 }
 
+                let offset = if c.function.function_kind == FunctionKind::Method {
+                    1
+                } else {
+                    0
+                };
+
                 // Push a call frame
                 vm.call_stack.push(CallFrame {
                     chunk: vm.current_chunk.clone(),
                     closure: c.clone(),
                     return_ip: vm.ip,
                     register_base: fn_register,
-                    stack_index: vm.stack_index as stack_index_type - num_args as stack_index_type,
+                    stack_index: vm.stack_index as stack_index_type - (num_args as stack_index_type + offset),
                     stack_state_index: vm.stack_states.len()
                 });
 
@@ -387,7 +403,10 @@ pub fn execute_instruction(
             match func_val {
 
                 Value::Closure(c) => {
-                    call_closure(c)?;
+                    match c  {
+                        crate::value::callable::Callable::LoxFunction(closure) => call_closure(&closure)?,
+                        crate::value::callable::Callable::BindedLoxFunction(_, closure) => call_closure(closure)?,
+                    };
                 }
 
 
@@ -415,20 +434,42 @@ pub fn execute_instruction(
                     vm.stack_index -= num_args as stack_pointer_type;
                 },
                 Value::Class(c) => {
-                    let class_instance = ClassInstance::new(c.clone());
+                    match c.constructor() {
+                        Some(callable) => {
+                            match callable {
+                                Callable::LoxFunction(closure) => call_closure(&closure)?,
+                                Callable::BindedLoxFunction(_, closure) => call_closure(&closure)?,
+                            }
+                        },
+                        None => {
+                            let class_instance = ClassInstance::new(c.clone());
+                            vm.registers[fn_register as usize] = Value::Instance(class_instance);
 
-                    // todo: call constructor
-                    vm.registers[fn_register as usize] = Value::Instance(class_instance);
+
+                        },
+                    }
                 }
 
                 _ => return Err(EvaluateErrorDetails::ExpectedFunction),
             }
         },
         Instructions::FunctionReturn => {
-            let return_val = std::mem::take(&mut vm.registers[vm.get_register(0) as usize]);
+            let return_val = {
+                let v = vm.call_stack.last().ok_or(EvaluateErrorDetails::InvalidReturnStatement)?;
+                if v.closure.function.name == "init" && v.closure.function.function_kind == FunctionKind::Method {
+                    let index = vm.get_stack_index(0) as usize;
+                    std::mem::take(&mut vm.stack[index as usize])
+                }
+                else {
+                    std::mem::take(&mut vm.registers[vm.get_register(0) as usize])
+                }
+            };
             let v = vm.call_stack.pop().ok_or(EvaluateErrorDetails::InvalidReturnStatement)?;
             vm.ip = v.return_ip;
             vm.current_chunk = v.chunk;
+
+
+
             vm.registers[v.register_base as usize] = return_val;
             vm.stack_index = v.stack_index as stack_pointer_type;
 
@@ -468,10 +509,10 @@ pub fn execute_instruction(
             }
 
             let func = func.as_function()?;
-            vm.registers[dst_register as usize] = Value::Closure(Closure {
+            vm.registers[dst_register as usize] = Value::Closure(crate::value::callable::Callable::LoxFunction(Closure {
                 function: func,
                 upvalues,
-            });
+            }));
         },
         Instructions::GetUpvalue => {
             let output_register = vm.read_register();
@@ -526,7 +567,7 @@ pub fn execute_instruction(
                 Value::String(a) => {
                     match &vm.registers[register as usize] {
                         Value::Instance(class_instance) => {
-                            class_instance.get_field(a)
+                            class_instance.get_field(a)?
                         }
                         _ => return Err(InterpretError::InvalidIdentifierType)
                     }
@@ -552,7 +593,57 @@ pub fn execute_instruction(
                     return Err(InterpretError::InvalidIdentifierType);
                 }
             };
-        }
+        },
+        Instructions::CreateMethod => {
+            let value_register = vm.read_register();
+            let dist_register = vm.read_register();
+
+            match (vm.registers[value_register as usize].clone(), &mut vm.registers[dist_register as usize]) {
+                (Value::Closure(closure), Value::Class(class)) => {
+                    match &closure {
+                        Callable::LoxFunction(c) => if c.function.name == "init".to_string() {
+                            class.set_constructor(closure.clone());
+                        },
+                        Callable::BindedLoxFunction(_, _) => unreachable!(),
+                    }
+
+                    class.add_method(closure.clone());
+                },
+                _ => {
+                    return Err(InterpretError::InvalidIdentifierType);
+                }
+            }
+        },
+        Instructions::InitFunction => {
+            let dist_register = vm.read_register();
+            match &vm.registers[dist_register as usize].inner() {
+                Value::Closure(callable) => {
+                    match callable {
+                        crate::value::callable::Callable::LoxFunction(closure) => {
+                            if closure.function.function_kind == FunctionKind::Method {
+                                return Err(InterpretError::UnbindedMethod);
+                            }
+                        },
+                        crate::value::callable::Callable::BindedLoxFunction(class_instance, _) =>  {
+                            vm.define_local(Value::Instance(class_instance.clone()))?;
+                        },
+                    }
+                },
+                Value::Class(class) => {
+
+                    if class.constructor().is_some() {
+                        let class_instance = ClassInstance::new(class.clone());
+                        vm.define_local(Value::Instance(class_instance.clone()))?;
+                    }
+                }
+                Value::GlobalFunction(_) => {},
+
+                _ => {
+                    return Err(InterpretError::InvalidIdentifierType)
+                }
+
+            }
+        },
     }
 
     Ok(())

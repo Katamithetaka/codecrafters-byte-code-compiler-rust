@@ -121,7 +121,10 @@ pub enum EvaluateErrorDetails {
     InvalidUpvalueType,
 
     #[error("{0}")]
-    ParserError( #[from] ParserError)
+    ParserError( #[from] ParserError),
+
+    #[error("Method was unbinded ('this' was not set)")]
+    UnbindedMethod
 
 }
 

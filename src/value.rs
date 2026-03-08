@@ -4,7 +4,7 @@ pub mod class_instance;
 
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use crate::{value::{class::Class, class_instance::ClassInstance}};
+use crate::value::{callable::Callable, class::Class, class_instance::ClassInstance};
 pub use crate::{prelude::EvaluateErrorDetails, value::callable::{Closure, Function, GlobalFunction}};
 
 
@@ -26,7 +26,7 @@ pub enum Value<S> {
     GlobalFunction(GlobalFunction),
     /// A reference-counted, mutable value.
     Cell(Rc<RefCell<Value<S>>>),
-    Closure(Closure<S>),
+    Closure(Callable),
     Class(Class),
     Instance(ClassInstance)
 }
@@ -41,7 +41,12 @@ impl<S: Display> Display for Value<S> {
             Value::Function(s) => write!(f, "{}", s),
             Value::GlobalFunction(s) => write!(f, "{}", s),
             Value::Cell(s) => write!(f, "{}", s.borrow()),
-            Value::Closure(closure) => write!(f, "{}", closure.function),
+            Value::Closure(closure) => {
+                match closure {
+                    Callable::LoxFunction(closure) => write!(f, "{}", closure.function),
+                    Callable::BindedLoxFunction(_, closure) => write!(f, "{}", closure.function),
+                }
+            },
             Value::Class(class) => write!(f, "{}", class),
             Value::Instance(class) => write!(f, "{}", class),
 

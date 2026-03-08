@@ -4,19 +4,22 @@ use crate::{
     ParserError, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}, int_types::{line_type, register_index_type}}, expressions::{
         Value,
         identifier::Identifier,
-    }, statements::Statement, value::class::Class
+    }, prelude::FunctionDeclareStatement, statements::Statement, value::class::Class
 };
 
 #[derive(Debug)]
 pub struct ClassDeclareStatement<'a> {
     pub ident: Identifier<'a>,
+    pub functions: Vec<FunctionDeclareStatement<'a>>
 }
 impl<'a> ClassDeclareStatement<'a> {
     pub fn new(
         ident: Identifier<'a>,
+        functions: Vec<FunctionDeclareStatement<'a>>
     ) -> Self {
         Self {
             ident,
+            functions
         }
     }
 }
@@ -30,10 +33,9 @@ impl<'a> CodeGenerator<'a> for ClassDeclareStatement<'a> {
         reserved_registers: Vec<register_index_type>,
     ) -> crate::compiler::Result {
         let dst_reg = self.dst_or_default(dst, &reserved_registers);
-        let mut chunk = compiler.borrow_mut();
 
 
-        match chunk.declare_variable(self.ident.token, self.ident.line as line_type) {
+        match compiler.borrow_mut().declare_variable(self.ident.token, self.ident.line as line_type) {
             Ok(_) => {},
             Err(_) => {
                 Err(ParserError {
@@ -43,23 +45,42 @@ impl<'a> CodeGenerator<'a> for ClassDeclareStatement<'a> {
             },
         }
 
-        let constant = chunk.add_constant(Value::Null);
+        let constant = compiler.borrow_mut().add_constant(Value::Null);
+
 
         let class = Class::new(self.ident.token.to_string());
-
-        // todo: handle methods
-
-
-        chunk.chunk.constants[constant.0 as usize] = Value::Class(class);
+        let func_dst = self.next_dst(1, dst_reg, &reserved_registers);
 
 
-        chunk.write_load(dst_reg, constant, self.ident.line as line_type);
-        match chunk.resolve_variable(self.ident.token) {
+        compiler.borrow_mut().chunk.constants[constant.0 as usize] = Value::Class(class);
+
+        compiler.borrow_mut().write_load(dst_reg, constant, self.ident.line as line_type);
+
+        compiler.borrow_mut().write_stack_push(self.ident.line);
+
+        eprintln!("Got here 1!");
+        for func in self.functions.iter_mut() {
+            func.function_kind = crate::value::callable::FunctionKind::Method;
+            compiler.borrow_mut().declare_function(func.ident.token, func.ident.line as line_type);
+            compiler.borrow_mut().write_declare_local(0, func.ident.line as line_type);
+
+            func.write_expression(compiler.clone(), Some(func_dst), reserved_registers.clone())?;
+
+            compiler.borrow_mut().write_method_declare(func_dst, dst_reg, self.ident.line as line_type);
+
+        }
+        eprintln!("Got here 2!");
+
+        compiler.borrow_mut().write_stack_pop(self.ident.line);
+
+        let mut compiler = compiler.borrow_mut();
+
+        match compiler.resolve_variable(self.ident.token) {
             Ok(ResolvedVar::Local(_)) | Err(_) => {
-                chunk.write_declare_local(dst_reg, self.ident.line as line_type);
+                compiler.write_declare_local(dst_reg, self.ident.line as line_type);
             },
             Ok(ResolvedVar::Global(varint)) => {
-                chunk.write_declare_global(varint, dst_reg, self.ident.line as line_type);
+                compiler.write_declare_global(varint, dst_reg, self.ident.line as line_type);
             },
             Ok(ResolvedVar::Upvalue(_)) => unreachable!(),
         }

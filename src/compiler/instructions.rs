@@ -40,6 +40,8 @@ pub enum Instructions {
     SetUpvalue = 31,
     GetField = 32,
     SetField = 33,
+    CreateMethod = 34,
+    InitFunction = 35,
 }
 
 pub fn simple_instruction(name: &str, offset: usize) -> usize {
@@ -231,6 +233,8 @@ pub fn disassemble_instruction<T: Display>(chunk: Rc<Chunk<T>>, offset: usize, p
         Some(Instructions::SetUpvalue) => stack_access_instruction("OP_U_SET", chunk, offset),
         Some(Instructions::GetField) => constant_register_instruction("OP_F_GET", chunk, offset),
         Some(Instructions::SetField) => constant_set_register_instruction("OP_F_SET", chunk, offset),
+        Some(Instructions::CreateMethod) => unary_instruction("OP_C_METHOD", chunk, offset),
+        Some(Instructions::InitFunction) => single_register_instruction("OP_FN_INIT", chunk, offset),
 
         None => offset + 1,
     }

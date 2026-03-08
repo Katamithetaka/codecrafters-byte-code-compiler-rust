@@ -1,17 +1,13 @@
-class Superhero {}
-var batman = Superhero();
-var superman = Superhero();
+class Confused {
+  method() {
+    fun inner(instance) {
+      this.feeling = "pizza";
+      print this.feeling;
+    }
+    return inner;
+  }
+}
 
-// Setting properties on an instance should work
-batman.name = "Batman";
-batman.called = 21;
-
-// Setting properties on an instance should work
-superman.name = "Superman";
-superman.called = 19;
-
-// Getting properties on an instance should work
-print "Times " + superman.name + " was called: ";
-print superman.called;
-print "Times " + batman.name + " was called: ";
-print batman.called;
+var instance = Confused();
+var m = instance.method();
+m(instance);

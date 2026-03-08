@@ -284,6 +284,18 @@ impl<'a> Compiler<'a> {
         ident.write_bytes(self, line)
     }
 
+    pub fn write_method_declare(&mut self, func_register: register_index_type, dst_register: register_index_type, line: line_type) {
+        self.write_instruction(Instructions::CreateMethod, line);
+        self.write_bytes(&func_register.to_be_bytes(), line);
+        self.write_bytes(&dst_register.to_be_bytes(), line);
+    }
+
+    pub fn write_function_init(&mut self, func_register: register_index_type, line: line_type) {
+        self.write_instruction(Instructions::InitFunction, line);
+        self.write_bytes(&func_register.to_be_bytes(), line);
+
+    }
+
     pub fn write_function_return(&mut self, line: line_type) {
         self.write_instruction(Instructions::FunctionReturn, line);
     }

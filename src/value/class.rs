@@ -1,6 +1,6 @@
-use std::{fmt::Display, rc::Rc};
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use crate::{value::{Closure}};
+use crate::value::{Closure, callable::Callable};
 
 /// Represents the internal details of a function, including its name, starting position, and argument count.
 #[derive(Clone, Debug)]
@@ -8,14 +8,15 @@ pub struct ClassInner {
     /// The name of the function.
     pub name: String,
 
-    pub constructor: Option<Closure<String>>
+    pub constructor: Option<Callable>,
+    pub methods: Vec<Callable>
 }
 
 /// Represents a user-defined function in the interpreter.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Class {
     /// The internal details of the function.
-    inner: Rc<ClassInner>
+    inner: Rc<RefCell<ClassInner>>,
 }
 
 impl PartialEq for ClassInner {
@@ -26,7 +27,7 @@ impl PartialEq for ClassInner {
 
 impl Display for Class {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.inner.name)
+        write!(f, "{}", self.inner.borrow().name)
     }
 }
 
@@ -34,14 +35,32 @@ impl Class {
 
     pub fn new(name: String) -> Self {
         Self {
-            inner: Rc::new(ClassInner {
+            inner: Rc::new(RefCell::new(ClassInner {
                 name,
+                methods: vec![],
                 constructor: None
-            }),
+            })),
         }
     }
 
+    pub fn add_method(&mut self, method: Callable) {
+        self.inner.borrow_mut().methods.push(method);
+    }
+
+    pub fn methods(&self) -> Vec<Callable> {
+        self.inner.borrow().methods.clone()
+    }
+
     pub fn name(&self) -> String {
-        self.inner.name.clone()
+        self.inner.borrow().name.clone()
+    }
+
+    pub fn constructor(&self) -> Option<Callable> {
+        return self.inner.borrow().constructor.clone();
+    }
+
+    pub fn set_constructor(&mut self, callabl: Callable) {
+        self.inner.borrow_mut().constructor  = Some(callabl);
+
     }
 }

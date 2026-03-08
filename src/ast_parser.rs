@@ -3,9 +3,9 @@ use std::{fmt::Display, iter::Peekable};
 use crate::{
     Token, compiler::int_types::line_type, expressions::{
         Expressions, assignment_expression::AssignmentExpression, binary_expression::{BinaryExpression, BinaryOp}, call_expression::CallExpression, equality_expression::{EqualityExpression, EqualityOp}, get_expression::GetExpression, group::Group, identifier::Identifier, logical_expression::{LogicalExpression, LogicalOp}, relation_expression::{RelationalExpression, RelationalOp}, set_expression::SetExpression, unary_expression::{UnaryExpression, UnaryOp}
-    }, prelude::ClassDeclareStatement, scanner::{Keyword, TokenKind}, statements::{
+    }, prelude::ClassDeclareStatement, scanner::{Keyword, TokenKind, TokenValue}, statements::{
         Statements, block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement, print_statement::PrintStatement, return_statement::ReturnStatement, while_statements::WhileStatement
-    }
+    }, value::{Function, Value, callable::FunctionKind}
 };
 
 /// Represents the state of the AST parser, including the current position,
@@ -367,6 +367,13 @@ impl<'a> AstParser<'a> {
             TokenKind::String => Ok((Literal::new(self.advance())).into()),
             TokenKind::Keyword(Keyword::False) => Ok((Literal::new(self.advance())).into()),
             TokenKind::Keyword(Keyword::Nil) => Ok((Literal::new(self.advance())).into()),
+            TokenKind::Keyword(Keyword::This) => {
+                self.advance();
+                Ok(Expressions::Identifier(Identifier {
+                    token: "this",
+                    line: self.line_number(),
+                }))
+            }
             TokenKind::Identifier => Ok(self.identifier()?.into()),
             c => self.error(ParserErrorDetails::UnexpectedToken(
                 c,
@@ -416,7 +423,7 @@ impl<'a> AstParser<'a> {
         return Ok(statement);
     }
 
-    pub fn function_declaration(&mut self) -> Result<Statements<'a>, ParserError> {
+    pub fn function_declaration(&mut self) -> Result<FunctionDeclareStatement<'a>, ParserError> {
         let fun_name = self.identifier()?;
         self.consume(TokenKind::LeftParen)?;
         let mut args = vec![];
@@ -437,7 +444,7 @@ impl<'a> AstParser<'a> {
         }
         self.consume(TokenKind::RightBrace)?;
 
-        let statement = FunctionDeclareStatement::new(fun_name, args, statements);
+        let statement = FunctionDeclareStatement::new(fun_name, args, statements, FunctionKind::Function);
 
         return Ok(statement.into())
     }
@@ -445,10 +452,13 @@ impl<'a> AstParser<'a> {
     pub fn class_declaration(&mut self) -> Result<Statements<'a>, ParserError> {
         let class_name = self.identifier()?;
         self.consume(TokenKind::LeftBrace)?;
-        // TODO: class methods
+        let mut functions = vec![];
+        while self.token_kind() != TokenKind::RightBrace {
+            functions.push(self.function_declaration()?);
+        }
         self.consume(TokenKind::RightBrace)?;
 
-        let statement = ClassDeclareStatement::new(class_name);
+        let statement = ClassDeclareStatement::new(class_name, functions);
 
         return Ok(statement.into())
     }

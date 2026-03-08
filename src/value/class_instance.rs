@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 
-use crate::value::{Value, class::Class};
+use crate::{prelude::EvaluateError, value::{EvaluateErrorDetails, Value, class::Class}};
 
 /// Represents the internal details of a function, including its name, starting position, and argument count.
 #[derive(Clone, Debug)]
@@ -31,18 +31,28 @@ impl Display for ClassInstance {
 impl ClassInstance {
 
     pub fn new(class: Class) -> Self {
-        Self {
+        let mut s = Self {
             inner: Rc::new(ClassInstanceInner {
-                class,
+                class: class.clone(),
                 fields: RefCell::new(HashMap::new()),
             }),
+        };
+
+        for method in class.methods() {
+            let method = method.clone().bind(s.clone());
+            match method {
+                super::callable::Callable::BindedLoxFunction(class_instance, closure) => s.set_field(closure.function.name.clone(), Value::Closure(super::callable::Callable::BindedLoxFunction(class_instance, closure.clone()))),
+                _ => unreachable!()
+            }
         }
+
+        s
     }
 
-    pub fn get_field(&self, field_name: &str) -> Value<String> {
+    pub fn get_field(&self, field_name: &str) -> Result< Value<String>, EvaluateErrorDetails> {
         match self.inner.fields.borrow().get(field_name) {
-            Some(v) => v.clone(),
-            None => Value::Null,
+            Some(v) => Ok(v.clone()),
+            None => Err(EvaluateErrorDetails::UndefinedVariable(field_name.to_string())),
         }
     }
 

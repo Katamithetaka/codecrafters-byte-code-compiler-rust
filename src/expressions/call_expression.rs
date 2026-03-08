@@ -46,6 +46,7 @@ impl<'a> CodeGenerator<'a> for CallExpression<'a> {
         let dst = self.next_dst(dist, 1, &reserved_registers);
         self.lhs.write_expression(chunk.clone(), Some(dist), reserved_registers.clone())?;
 
+        chunk.borrow_mut().write_function_init(dist, self.lhs.line_number());
 
         for argument in self.arguments.iter_mut() {
             argument.write_expression(chunk.clone(), Some(dst), reserved_registers.clone())?;

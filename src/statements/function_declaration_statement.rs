@@ -4,7 +4,7 @@ use crate::{
     ParserError, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}, int_types::{line_type, register_index_type}}, expressions::{
         Function, Value,
         identifier::Identifier,
-    }, statements::{Statement, Statements}
+    }, statements::{Statement, Statements}, value::callable::FunctionKind
 };
 
 #[derive(Debug)]
@@ -12,17 +12,20 @@ pub struct FunctionDeclareStatement<'a> {
     pub ident: Identifier<'a>,
     pub args: Vec<Identifier<'a>>,
     pub statements: Vec<Statements<'a>>,
+    pub function_kind: FunctionKind
 }
 impl<'a> FunctionDeclareStatement<'a> {
     pub fn new(
         ident: Identifier<'a>,
         args: Vec<Identifier<'a>>,
         statements: Vec<Statements<'a>>,
+        function_kind: FunctionKind
     ) -> Self {
         Self {
             ident,
             args,
             statements,
+            function_kind
         }
     }
 }
@@ -56,6 +59,24 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
 
         // Create a new nested compiler for the function body
         let fn_compiler = Compiler::with_parent(Rc::clone(&compiler));
+
+        if self.function_kind == FunctionKind::Method {
+            let mut fn_compiler = fn_compiler.borrow_mut();
+
+            match fn_compiler.declare_variable("this", self.ident.line as line_type) {
+                Ok(_) => {},
+                Err(_) => {
+                    Err(ParserError {
+                        error: crate::ast_parser::ParserErrorDetails::VariableRedeclaration,
+                        line: self.ident.line,
+                    })?
+                },
+            }
+
+            let scope_depth = fn_compiler.scope_depth;
+            fn_compiler.locals.last_mut().unwrap().depth = scope_depth;
+
+        }
 
         // Add parameters as locals in the nested compiler
         for arg in &self.args {
@@ -106,7 +127,8 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
         let function = Function::new(
             self.ident.token.to_string(),
             self.args.len() as u8,
-            Rc::new(fn_compiler.borrow().chunk.clone().into())
+            Rc::new(fn_compiler.borrow().chunk.clone().into()),
+            self.function_kind
         );
 
         let mut compiler = compiler.borrow_mut();
