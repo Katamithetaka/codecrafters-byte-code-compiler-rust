@@ -58,7 +58,7 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
         drop(chunk);
 
         // Create a new nested compiler for the function body
-        let fn_compiler = Compiler::with_parent(Rc::clone(&compiler), self.function_kind);
+        let fn_compiler = Compiler::with_parent(Rc::clone(&compiler), self.ident.token.to_string(), self.function_kind);
 
         if self.function_kind == FunctionKind::Method {
             let mut fn_compiler = fn_compiler.borrow_mut();

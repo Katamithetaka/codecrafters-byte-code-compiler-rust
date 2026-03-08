@@ -34,6 +34,13 @@ impl<'a> CodeGenerator<'a> for ReturnStatement<'a> {
         }
 
         if let Some(expr) = &mut self.expr {
+            if chunk.borrow().is_in_constructor() {
+                Err(ParserError {
+                    error: crate::ast_parser::ParserErrorDetails::InvalidReturnStatement,
+                    line: self.line_number,
+                })?
+            }
+
             expr
                 .write_expression(chunk.clone(), Some(dist), reserved_registers)?;
         }

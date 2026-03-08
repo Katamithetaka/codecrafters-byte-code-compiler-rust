@@ -28,6 +28,7 @@ pub struct Compiler<'a> {
     pub scope_depth: i32,
     pub enclosing: Option<Rc<RefCell<Compiler<'a>>>>,
     pub function_kind: Option<FunctionKind>,
+    pub function_name: Option<String>,
     globals: Option<Vec<String>>
 }
 
@@ -46,11 +47,12 @@ impl<'a> Compiler<'a> {
             scope_depth: 0,
             enclosing: None,
             globals: Some(Vec::new()),
-            function_kind: None
+            function_kind: None,
+            function_name: None
         }))
     }
 
-    pub fn with_parent(compiler: Rc<RefCell<Compiler<'a>>>, function_kind: FunctionKind) -> Rc<RefCell<Self>> {
+    pub fn with_parent(compiler: Rc<RefCell<Compiler<'a>>>, function_name: String, function_kind: FunctionKind) -> Rc<RefCell<Self>> {
         let compiler = Compiler {
             chunk: Chunk::new(),
             locals: Vec::new(),
@@ -58,7 +60,8 @@ impl<'a> Compiler<'a> {
             scope_depth: 0,
             enclosing: Some(compiler),
             globals: None,
-            function_kind: Some(function_kind)
+            function_kind: Some(function_kind),
+            function_name: Some(function_name)
         };
 
 
@@ -70,6 +73,13 @@ impl<'a> Compiler<'a> {
         match self.function_kind {
             Some(c) => c == FunctionKind::Method || self.enclosing.as_ref().unwrap().borrow().is_in_method(),
             None => false,
+        }
+    }
+
+    pub fn is_in_constructor(&self) -> bool {
+        match (self.function_kind, &self.function_name) {
+            (Some(c), Some(function_name)) => c == FunctionKind::Method && function_name == "init",
+            _ => false,
         }
     }
 
