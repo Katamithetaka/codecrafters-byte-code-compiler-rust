@@ -664,6 +664,10 @@ pub fn execute_instruction(
 
                     for value in value.methods() {
                         if !dist.has_method(value.name()) {
+                            if value.name() == "init".to_string() {
+                                dist.set_constructor(value.clone());
+
+                            }
                             dist.add_method(value.clone());
                         }
                     }
