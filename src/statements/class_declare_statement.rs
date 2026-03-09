@@ -38,6 +38,7 @@ impl<'a> CodeGenerator<'a> for ClassDeclareStatement<'a> {
         let dst_reg = self.dst_or_default(dst, &reserved_registers);
 
 
+
         compiler.borrow_mut().declare_function(self.ident.token, self.ident.line as line_type);
         compiler.borrow_mut().mark_declared(self.ident.token.to_string());
 
@@ -81,6 +82,13 @@ impl<'a> CodeGenerator<'a> for ClassDeclareStatement<'a> {
         eprintln!("Got here 2!");
 
         if let Some(inherited) = &self.inherited_class {
+
+            if inherited.token == self.ident.token {
+                Err(ParserError {
+                    error: crate::ast_parser::ParserErrorDetails::InvalidInheritance,
+                    line: inherited.line,
+                })?
+            }
             let mut compiler = compiler.borrow_mut();
 
             match compiler.resolve_variable(inherited.token)? {

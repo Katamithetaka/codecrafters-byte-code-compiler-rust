@@ -65,7 +65,9 @@ pub enum ParserErrorDetails {
     #[error("Return statement in top-level code")]
     InvalidReturnStatement,
     #[error("This used in top-level code")]
-    InvalidThisUsage
+    InvalidThisUsage,
+    #[error("Class cannot inherit from themselves!")]
+    InvalidInheritance,
 }
 
 impl<'a> AstParser<'a> {
