@@ -7,7 +7,7 @@ use crate::value::{Closure, callable::Callable};
 pub struct ClassInner {
     /// The name of the function.
     pub name: String,
-
+    pub base_class: Option<Class>,
     pub constructor: Option<Callable>,
     pub methods: Vec<Callable>
 }
@@ -37,6 +37,7 @@ impl Class {
         Self {
             inner: Rc::new(RefCell::new(ClassInner {
                 name,
+                base_class: None,
                 methods: vec![],
                 constructor: None
             })),
@@ -49,6 +50,14 @@ impl Class {
 
     pub fn methods(&self) -> Vec<Callable> {
         self.inner.borrow().methods.clone()
+    }
+
+    pub fn has_method(&self, name: String) -> bool {
+        self.inner.borrow().methods.iter().find(|c| c.name() == name).is_some()
+    }
+
+    pub fn set_base_class(&mut self, class: Class) {
+        self.inner.borrow_mut().base_class = Some(class);
     }
 
     pub fn name(&self) -> String {

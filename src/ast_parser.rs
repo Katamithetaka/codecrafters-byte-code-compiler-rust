@@ -453,14 +453,23 @@ impl<'a> AstParser<'a> {
 
     pub fn class_declaration(&mut self) -> Result<Statements<'a>, ParserError> {
         let class_name = self.identifier()?;
+        let mut inherited_class = None;
+
+        if self.token_kind() == TokenKind::Less {
+            self.consume(TokenKind::Less)?;
+            inherited_class = Some(self.identifier()?);
+        }
+
         self.consume(TokenKind::LeftBrace)?;
+
+
         let mut functions = vec![];
         while self.token_kind() != TokenKind::RightBrace {
             functions.push(self.function_declaration()?);
         }
         self.consume(TokenKind::RightBrace)?;
 
-        let statement = ClassDeclareStatement::new(class_name, functions);
+        let statement = ClassDeclareStatement::new(class_name, functions, inherited_class);
 
         return Ok(statement.into())
     }

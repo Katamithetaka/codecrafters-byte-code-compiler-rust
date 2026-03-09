@@ -1,6 +1,6 @@
 use std::{fmt::Display, rc::Rc};
 
-use crate::{prelude::Chunk, value::{Value, class_instance::ClassInstance}};
+use crate::{prelude::Chunk, value::{Value, class::Class, class_instance::ClassInstance}};
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -19,7 +19,8 @@ pub struct Function<T> {
     pub arguments_count: u8,
 
     pub chunk: Rc<Chunk<T>>,
-    pub function_kind: FunctionKind
+    pub function_kind: FunctionKind,
+    pub class: Option<Class>
 }
 
 impl<T> PartialEq for Function<T> {
@@ -70,7 +71,8 @@ impl Function<String> {
             name,
             arguments_count,
             chunk,
-            function_kind
+            function_kind,
+            class: None
         }
     }
 
@@ -96,6 +98,13 @@ impl Callable {
         match self {
             Callable::LoxFunction(closure) => Callable::BindedLoxFunction(instance, closure),
             Callable::BindedLoxFunction(_, closure) => Callable::BindedLoxFunction(instance, closure),
+        }
+    }
+
+    pub fn name(&self) -> String {
+        match self {
+            Callable::LoxFunction(closure) => closure.function.name.clone(),
+            Callable::BindedLoxFunction(_, closure) => closure.function.name.clone(),
         }
     }
 }

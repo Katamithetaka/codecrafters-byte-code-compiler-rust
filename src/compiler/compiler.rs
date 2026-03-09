@@ -508,4 +508,11 @@ impl<'a> Compiler<'a> {
             self.write_bytes(&index_bytes, line);
         }
     }
+
+    pub fn write_inherit_methods(&mut self, value_reg: register_index_type, dst_reg: register_index_type, line: line_type) {
+        self.write_instruction(Instructions::SetBaseClass, line);
+        self.write_bytes(&value_reg.to_be_bytes(), line);
+        self.write_bytes(&dst_reg.to_be_bytes(), line);
+
+    }
 }

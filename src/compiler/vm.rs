@@ -597,15 +597,24 @@ pub fn execute_instruction(
         Instructions::CreateMethod => {
             let value_register = vm.read_register();
             let dist_register = vm.read_register();
+            let function = std::mem::replace(&mut vm.registers[value_register as usize], Value::Null);
+            match (function, &mut vm.registers[dist_register as usize]) {
+                (Value::Closure(mut closure), Value::Class(class)) => {
 
-            match (vm.registers[value_register as usize].clone(), &mut vm.registers[dist_register as usize]) {
-                (Value::Closure(closure), Value::Class(class)) => {
+                    match &mut closure {
+                        Callable::LoxFunction(c) => {
+                            c.function.class = Some(class.clone());
+                        },
+                        Callable::BindedLoxFunction(_, _) => unreachable!(),
+                    }
+
                     match &closure {
                         Callable::LoxFunction(c) => if c.function.name == "init".to_string() {
                             class.set_constructor(closure.clone());
                         },
                         Callable::BindedLoxFunction(_, _) => unreachable!(),
                     }
+
 
                     class.add_method(closure.clone());
                 },
@@ -638,12 +647,34 @@ pub fn execute_instruction(
                 }
                 Value::GlobalFunction(_) => {},
 
-                a => {
+                _ => {
                     return Err(InterpretError::InvalidIdentifierType)
                 }
 
             }
         },
+        Instructions::SetBaseClass => {
+            let value_register = vm.read_register();
+            let dist_register = vm.read_register();
+
+            match (std::mem::replace( &mut vm.registers[value_register as usize], Value::Null), &mut vm.registers[dist_register as usize]) {
+
+                (Value::Class(value), Value::Class(dist)) => {
+                    dist.set_base_class(value.clone());
+
+                    for value in value.methods() {
+                        if !dist.has_method(value.name()) {
+                            dist.add_method(value.clone());
+                        }
+                    }
+                },
+                _ => {
+                    return Err(InterpretError::InvalidIdentifierType)
+
+                }
+
+            }
+        }
     }
 
     Ok(())

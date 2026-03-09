@@ -10,16 +10,19 @@ use crate::{
 #[derive(Debug)]
 pub struct ClassDeclareStatement<'a> {
     pub ident: Identifier<'a>,
-    pub functions: Vec<FunctionDeclareStatement<'a>>
+    pub functions: Vec<FunctionDeclareStatement<'a>>,
+    pub inherited_class: Option<Identifier<'a>>
 }
 impl<'a> ClassDeclareStatement<'a> {
     pub fn new(
         ident: Identifier<'a>,
-        functions: Vec<FunctionDeclareStatement<'a>>
+        functions: Vec<FunctionDeclareStatement<'a>>,
+        inherited_class: Option<Identifier<'a>>
     ) -> Self {
         Self {
             ident,
-            functions
+            functions,
+            inherited_class
         }
     }
 }
@@ -76,6 +79,22 @@ impl<'a> CodeGenerator<'a> for ClassDeclareStatement<'a> {
 
         }
         eprintln!("Got here 2!");
+
+        if let Some(inherited) = &self.inherited_class {
+            let mut compiler = compiler.borrow_mut();
+
+            match compiler.resolve_variable(inherited.token)? {
+                    ResolvedVar::Local(slot) => {
+                        compiler.write_get_local(func_dst, slot, inherited.line as line_type);
+                    },
+                    ResolvedVar::Global(varint) => {compiler.write_get_global(varint, func_dst, inherited.line as line_type);},
+                    ResolvedVar::Upvalue(slot) => { compiler.write_get_upvalue(func_dst, slot, inherited.line);},
+            }
+
+            compiler.write_inherit_methods(func_dst, dst_reg, self.ident.line);
+        }
+
+
 
         compiler.borrow_mut().write_stack_pop(self.ident.line);
 

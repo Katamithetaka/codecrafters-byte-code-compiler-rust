@@ -42,6 +42,7 @@ pub enum Instructions {
     SetField = 33,
     CreateMethod = 34,
     InitFunction = 35,
+    SetBaseClass = 36,
 }
 
 pub fn simple_instruction(name: &str, offset: usize) -> usize {
@@ -235,7 +236,7 @@ pub fn disassemble_instruction<T: Display>(chunk: Rc<Chunk<T>>, offset: usize, p
         Some(Instructions::SetField) => constant_set_register_instruction("OP_F_SET", chunk, offset),
         Some(Instructions::CreateMethod) => unary_instruction("OP_C_METHOD", chunk, offset),
         Some(Instructions::InitFunction) => single_register_instruction("OP_FN_INIT", chunk, offset),
-
+        Some(Instructions::SetBaseClass) => unary_instruction("OP_C_INHERIT", chunk, offset),
         None => offset + 1,
     }
 }
