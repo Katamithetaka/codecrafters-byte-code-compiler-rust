@@ -1,27 +1,9 @@
-class Base {
-  base_method() {
-    print "Base.method()";
-  }
+fun fib(n) {
+  if (n < 2) return n;
+  return fib(n - 1) + fib(n - 2);
 }
 
-class Parent < Base {
-  init() {
-    super.base_method();
-  }
-
-  parent_method() {
-    print "Parent.parent_method";
-    super.base_method();
-  }
-}
-
-class Child < Parent {
-  child_method() {
-    print "Child.child_method";
-
-    super.parent_method();
-  }
-}
-
-var parent = Parent();
-parent.parent_method();
+var before = clock();
+print fib(40);
+var after = clock();
+print after - before;
