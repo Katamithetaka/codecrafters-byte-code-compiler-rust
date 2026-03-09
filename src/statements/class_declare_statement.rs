@@ -71,6 +71,7 @@ impl<'a> CodeGenerator<'a> for ClassDeclareStatement<'a> {
         eprintln!("Got here 1!");
         for func in self.functions.iter_mut() {
             func.function_kind = crate::value::callable::FunctionKind::Method;
+            func.is_derived_class_method = self.inherited_class.is_some();
             compiler.borrow_mut().declare_function(func.ident.token, func.ident.line as line_type);
             compiler.borrow_mut().write_declare_local(0, func.ident.line as line_type);
 

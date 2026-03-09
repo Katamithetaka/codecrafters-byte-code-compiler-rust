@@ -12,20 +12,24 @@ pub struct FunctionDeclareStatement<'a> {
     pub ident: Identifier<'a>,
     pub args: Vec<Identifier<'a>>,
     pub statements: Vec<Statements<'a>>,
-    pub function_kind: FunctionKind
+    pub function_kind: FunctionKind,
+    pub is_derived_class_method: bool,
+
 }
 impl<'a> FunctionDeclareStatement<'a> {
     pub fn new(
         ident: Identifier<'a>,
         args: Vec<Identifier<'a>>,
         statements: Vec<Statements<'a>>,
-        function_kind: FunctionKind
+        function_kind: FunctionKind,
+        is_derived_class_method: bool,
     ) -> Self {
         Self {
             ident,
             args,
             statements,
-            function_kind
+            function_kind,
+            is_derived_class_method
         }
     }
 }
@@ -58,7 +62,7 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
         drop(chunk);
 
         // Create a new nested compiler for the function body
-        let fn_compiler = Compiler::with_parent(Rc::clone(&compiler), self.ident.token.to_string(), self.function_kind);
+        let fn_compiler = Compiler::with_parent(Rc::clone(&compiler), self.ident.token.to_string(), self.function_kind, self.is_derived_class_method);
 
         if self.function_kind == FunctionKind::Method {
             let mut fn_compiler = fn_compiler.borrow_mut();
@@ -71,6 +75,21 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
                         line: self.ident.line,
                     })?
                 },
+            }
+
+            let scope_depth = fn_compiler.scope_depth;
+            fn_compiler.locals.last_mut().unwrap().depth = scope_depth;
+
+            if self.is_derived_class_method {
+                match fn_compiler.declare_variable("super", self.ident.line as line_type) {
+                    Ok(_) => {},
+                    Err(_) => {
+                        Err(ParserError {
+                            error: crate::ast_parser::ParserErrorDetails::VariableRedeclaration,
+                            line: self.ident.line,
+                        })?
+                    },
+                }
             }
 
             let scope_depth = fn_compiler.scope_depth;
@@ -128,7 +147,8 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
             self.ident.token.to_string(),
             self.args.len() as u8,
             Rc::new(fn_compiler.borrow().chunk.clone().into()),
-            self.function_kind
+            self.function_kind,
+            self.is_derived_class_method,
         );
 
         let mut compiler = compiler.borrow_mut();

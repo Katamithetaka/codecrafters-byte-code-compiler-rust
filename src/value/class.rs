@@ -60,6 +60,10 @@ impl Class {
         self.inner.borrow_mut().base_class = Some(class);
     }
 
+    pub fn base_class(&self) -> Option<Class> {
+        self.inner.borrow().base_class.clone()
+    }
+
     pub fn name(&self) -> String {
         self.inner.borrow().name.clone()
     }

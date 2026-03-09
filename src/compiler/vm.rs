@@ -4,7 +4,7 @@ use crate::{
     compiler::{
         chunk::Chunk, instructions::{Instructions, disassemble_instruction}, int_types::{instruction_length_type, line_type, register_index_type, stack_index_type, stack_pointer_type, varint_type}, varint::Varint
     },
-    expressions::{EvaluateError, EvaluateErrorDetails}, value::{Closure, Function, callable::{Callable, FunctionKind}, class_instance::ClassInstance},
+    expressions::{EvaluateError, EvaluateErrorDetails}, value::{Closure, Function, callable::{Callable, FunctionKind}, class::Class, class_instance::ClassInstance},
 };
 
 pub use crate::compiler::int_types::VmRead;
@@ -23,7 +23,7 @@ pub struct CallFrame {
     pub stack_index: stack_index_type,
     pub stack_state_index: usize,
     pub chunk: Rc<Chunk<String>>,
-    pub closure: Closure<String>
+    pub closure: Closure<String>,
 }
 
 
@@ -381,14 +381,23 @@ pub fn execute_instruction(
                     0
                 };
 
+                let derived_method_offset = if c.function.function_kind == FunctionKind::Method && c.function.is_derived_method {
+                    1
+                }
+                else {
+                    0
+                };
+
+
+
                 // Push a call frame
                 vm.call_stack.push(CallFrame {
                     chunk: vm.current_chunk.clone(),
                     closure: c.clone(),
                     return_ip: vm.ip,
                     register_base: fn_register,
-                    stack_index: vm.stack_index as stack_index_type - (num_args as stack_index_type + offset),
-                    stack_state_index: vm.stack_states.len()
+                    stack_index: vm.stack_index as stack_index_type - (num_args as stack_index_type + offset + derived_method_offset),
+                    stack_state_index: vm.stack_states.len(),
                 });
 
                 vm.stack_states.push(vm.stack_index as stack_index_type);
@@ -633,16 +642,33 @@ pub fn execute_instruction(
                                 return Err(InterpretError::UnbindedMethod);
                             }
                         },
-                        crate::value::callable::Callable::BindedLoxFunction(class_instance, _) =>  {
+                        crate::value::callable::Callable::BindedLoxFunction(class_instance, f) =>  {
                             vm.define_local(Value::Instance(class_instance.clone()))?;
+
+                            if f.function.is_derived_method {
+                                vm.define_local(Value::Class(f.function.class.clone().unwrap()))?;
+                                if DEBUG_TRACE_EXECUTION {
+                                    eprintln!("Defining super!");
+                                }
+                            }
                         },
                     }
                 },
                 Value::Class(class) => {
 
-                    if class.constructor().is_some() {
+                    if let Some(constructor) = class.constructor() {
                         let class_instance = ClassInstance::new(class.clone());
                         vm.define_local(Value::Instance(class_instance.clone()))?;
+                        match constructor {
+                            Callable::LoxFunction(closure) => {
+                                if closure.function.is_derived_method {
+                                    vm.define_local(Value::Class(closure.function.class.clone().unwrap()))?;
+                                    eprintln!("Defining super!");
+
+                                }
+                            },
+                            _ => unreachable!()
+                        }
                     }
                 }
                 Value::GlobalFunction(_) => {},
@@ -677,6 +703,35 @@ pub fn execute_instruction(
 
                 }
 
+            }
+
+        },
+        Instructions::Super => {
+            let value_register = vm.read_register();
+            let this_register = vm.read_register();
+            let super_register = vm.read_register();
+            let dist_register = vm.read_register();
+
+
+            let identifier = vm.registers[value_register as usize].as_string()?;
+
+            let class = match vm.registers[super_register as usize].inner() {
+                Value::Class(class) => class.clone(),
+                _ => {
+                    return Err(InterpretError::InvalidIdentifierType)
+                }
+            }
+            ;
+
+            let derived_class = class.base_class().ok_or(EvaluateErrorDetails::InvalidUpvalueAccess)?;
+
+            let instance = vm.registers[this_register as usize].as_class_instance()?;
+
+            for value in derived_class.methods() {
+                if value.name() == identifier {
+                    vm.registers[dist_register as usize] = Value::Closure(value.clone().bind(instance));
+                    break;
+                }
             }
         }
     }

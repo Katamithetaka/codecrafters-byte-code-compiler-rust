@@ -43,6 +43,7 @@ pub enum Instructions {
     CreateMethod = 34,
     InitFunction = 35,
     SetBaseClass = 36,
+    Super = 37
 }
 
 pub fn simple_instruction(name: &str, offset: usize) -> usize {
@@ -111,6 +112,22 @@ pub fn binary_instruction<T>(name: &str, chunk: Rc<Chunk<T>>, mut offset: usize)
 
     return offset;
 }
+
+pub fn super_instruction<T>(name: &str, chunk: Rc<Chunk<T>>, mut offset: usize) -> usize {
+    offset += 1;
+
+    eprintln!(
+        "{name:15} r{} r{} r{} r{}",
+        register_index_type::read(Rc::clone(&chunk), &mut offset),
+        register_index_type::read(Rc::clone(&chunk), &mut offset),
+        register_index_type::read(Rc::clone(&chunk), &mut offset),
+        register_index_type::read(Rc::clone(&chunk), &mut offset),
+
+    );
+
+    return offset;
+}
+
 
 
 
@@ -237,6 +254,7 @@ pub fn disassemble_instruction<T: Display>(chunk: Rc<Chunk<T>>, offset: usize, p
         Some(Instructions::CreateMethod) => unary_instruction("OP_C_METHOD", chunk, offset),
         Some(Instructions::InitFunction) => single_register_instruction("OP_FN_INIT", chunk, offset),
         Some(Instructions::SetBaseClass) => unary_instruction("OP_C_INHERIT", chunk, offset),
+        Some(Instructions::Super) => super_instruction("OP_DC_SUPER", chunk, offset),
         None => offset + 1,
     }
 }

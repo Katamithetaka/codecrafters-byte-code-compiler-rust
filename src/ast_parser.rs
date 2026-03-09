@@ -2,7 +2,7 @@ use std::{fmt::Display, iter::Peekable};
 
 use crate::{
     Token, compiler::int_types::line_type, expressions::{
-        Expressions, assignment_expression::AssignmentExpression, binary_expression::{BinaryExpression, BinaryOp}, call_expression::CallExpression, equality_expression::{EqualityExpression, EqualityOp}, get_expression::GetExpression, group::Group, identifier::Identifier, logical_expression::{LogicalExpression, LogicalOp}, relation_expression::{RelationalExpression, RelationalOp}, set_expression::SetExpression, this_expression::This, unary_expression::{UnaryExpression, UnaryOp}
+        Expressions, assignment_expression::AssignmentExpression, binary_expression::{BinaryExpression, BinaryOp}, call_expression::CallExpression, equality_expression::{EqualityExpression, EqualityOp}, get_expression::GetExpression, group::Group, identifier::Identifier, logical_expression::{LogicalExpression, LogicalOp}, relation_expression::{RelationalExpression, RelationalOp}, set_expression::SetExpression, super_expression::Super, this_expression::This, unary_expression::{UnaryExpression, UnaryOp}
     }, prelude::ClassDeclareStatement, scanner::{Keyword, TokenKind, TokenValue}, statements::{
         Statements, block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement, print_statement::PrintStatement, return_statement::ReturnStatement, while_statements::WhileStatement
     }, value::{Function, Value, callable::FunctionKind}
@@ -66,6 +66,8 @@ pub enum ParserErrorDetails {
     InvalidReturnStatement,
     #[error("This used in top-level code")]
     InvalidThisUsage,
+    #[error("Super used in top-level code")]
+    InvalidSuperUsage,
     #[error("Class cannot inherit from themselves!")]
     InvalidInheritance,
 }
@@ -378,6 +380,16 @@ impl<'a> AstParser<'a> {
                     line: self.line_number(),
                 }))
             }
+            TokenKind::Keyword(Keyword::Super) => {
+                self.advance();
+                self.consume(TokenKind::Dot)?;
+                let identifier = self.identifier()?;
+                Ok(Expressions::SuperExpression(Super {
+                    token: "super",
+                    identifier: identifier,
+                    line: self.line_number(),
+                }))
+            }
             TokenKind::Identifier => Ok(self.identifier()?.into()),
             c => self.error(ParserErrorDetails::UnexpectedToken(
                 c,
@@ -448,7 +460,7 @@ impl<'a> AstParser<'a> {
         }
         self.consume(TokenKind::RightBrace)?;
 
-        let statement = FunctionDeclareStatement::new(fun_name, args, statements, FunctionKind::Function);
+        let statement = FunctionDeclareStatement::new(fun_name, args, statements, FunctionKind::Function, false);
 
         return Ok(statement.into())
     }

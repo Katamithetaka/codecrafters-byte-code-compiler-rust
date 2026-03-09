@@ -28,6 +28,7 @@ pub struct Compiler<'a> {
     pub scope_depth: i32,
     pub enclosing: Option<Rc<RefCell<Compiler<'a>>>>,
     pub function_kind: Option<FunctionKind>,
+    pub is_derived_class_method: bool,
     pub function_name: Option<String>,
     globals: Option<Vec<String>>
 }
@@ -48,11 +49,12 @@ impl<'a> Compiler<'a> {
             enclosing: None,
             globals: Some(Vec::new()),
             function_kind: None,
-            function_name: None
+            function_name: None,
+            is_derived_class_method: false,
         }))
     }
 
-    pub fn with_parent(compiler: Rc<RefCell<Compiler<'a>>>, function_name: String, function_kind: FunctionKind) -> Rc<RefCell<Self>> {
+    pub fn with_parent(compiler: Rc<RefCell<Compiler<'a>>>, function_name: String, function_kind: FunctionKind, is_derived_class_method: bool) -> Rc<RefCell<Self>> {
         let compiler = Compiler {
             chunk: Chunk::new(),
             locals: Vec::new(),
@@ -61,7 +63,8 @@ impl<'a> Compiler<'a> {
             enclosing: Some(compiler),
             globals: None,
             function_kind: Some(function_kind),
-            function_name: Some(function_name)
+            function_name: Some(function_name),
+            is_derived_class_method
         };
 
 
@@ -72,6 +75,13 @@ impl<'a> Compiler<'a> {
     pub fn is_in_method(&self) -> bool {
         match self.function_kind {
             Some(c) => c == FunctionKind::Method || self.enclosing.as_ref().unwrap().borrow().is_in_method(),
+            None => false,
+        }
+    }
+
+    pub fn is_in_derived_method(&self) -> bool {
+        match self.function_kind {
+            Some(c) => (c == FunctionKind::Method && self.is_derived_class_method) || self.enclosing.as_ref().unwrap().borrow().is_in_derived_method(),
             None => false,
         }
     }
@@ -514,5 +524,14 @@ impl<'a> Compiler<'a> {
         self.write_bytes(&value_reg.to_be_bytes(), line);
         self.write_bytes(&dst_reg.to_be_bytes(), line);
 
+    }
+
+    pub fn write_super(&mut self, value_reg: register_index_type, super_register: register_index_type, this_register: register_index_type, dst_reg: register_index_type, line: line_type) {
+        self.write_instruction(Instructions::Super, line);
+        self.write_bytes(&value_reg.to_be_bytes(), line);
+        self.write_bytes(&this_register.to_be_bytes(), line);
+        self.write_bytes(&super_register.to_be_bytes(), line);
+
+        self.write_bytes(&dst_reg.to_be_bytes(), line);
     }
 }

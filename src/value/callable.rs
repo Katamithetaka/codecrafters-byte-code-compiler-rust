@@ -20,6 +20,7 @@ pub struct Function<T> {
 
     pub chunk: Rc<Chunk<T>>,
     pub function_kind: FunctionKind,
+    pub is_derived_method: bool,
     pub class: Option<Class>
 }
 
@@ -66,12 +67,13 @@ impl PartialEq for GlobalFunction {
 
 
 impl Function<String> {
-    pub fn new(name: String, arguments_count: u8, chunk: Rc<Chunk<String>>, function_kind: FunctionKind) -> Self {
+    pub fn new(name: String, arguments_count: u8, chunk: Rc<Chunk<String>>, function_kind: FunctionKind, is_derived_method: bool) -> Self {
         Self {
             name,
             arguments_count,
             chunk,
             function_kind,
+            is_derived_method,
             class: None
         }
     }
