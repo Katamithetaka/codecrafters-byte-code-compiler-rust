@@ -1,7 +1,7 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
-    Token, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}, int_types::{line_type, register_index_type}}, expressions::Expression, prelude::EvaluateError, value::{EvaluateErrorDetails, callable::FunctionKind}
+    Token, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}, int_types::{line_type, register_index_type}}, expressions::Expression, prelude::EvaluateError, value::EvaluateErrorDetails
 };
 
 
@@ -55,6 +55,7 @@ impl<'a> CodeGenerator<'a> for This<'a> {
                 chunk.write_get_global(slot, dst, self.line as line_type);
             }
             ResolvedVar::Local(slot) => {
+                eprintln!("This resolved to slot {slot} with keyword for line {}", self.line);
                 chunk.write_get_local(dst, slot, self.line as line_type);
             }
             ResolvedVar::Upvalue(slot) => {

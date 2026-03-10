@@ -1,11 +1,11 @@
 use std::{fmt::Display, iter::Peekable};
 
 use crate::{
-    Token, compiler::int_types::line_type, expressions::{
+    Token, compiler::{garbage_collector::FunctionKind, int_types::line_type}, expressions::{
         Expressions, assignment_expression::AssignmentExpression, binary_expression::{BinaryExpression, BinaryOp}, call_expression::CallExpression, equality_expression::{EqualityExpression, EqualityOp}, get_expression::GetExpression, group::Group, identifier::Identifier, logical_expression::{LogicalExpression, LogicalOp}, relation_expression::{RelationalExpression, RelationalOp}, set_expression::SetExpression, super_expression::Super, this_expression::This, unary_expression::{UnaryExpression, UnaryOp}
-    }, prelude::ClassDeclareStatement, scanner::{Keyword, TokenKind, TokenValue}, statements::{
+    }, prelude::ClassDeclareStatement, scanner::{Keyword, TokenKind}, statements::{
         Statements, block_statement::BlockStatement, declare_statement::DeclareStatement, expression_statement::ExprStatement, for_statement::ForStatement, function_declaration_statement::FunctionDeclareStatement, if_statement::IfStatement, print_statement::PrintStatement, return_statement::ReturnStatement, while_statements::WhileStatement
-    }, value::{Function, Value, callable::FunctionKind}
+    }
 };
 
 /// Represents the state of the AST parser, including the current position,
@@ -70,6 +70,8 @@ pub enum ParserErrorDetails {
     InvalidSuperUsage,
     #[error("Class cannot inherit from themselves!")]
     InvalidInheritance,
+    #[error("Undefined variable '{0}'")]
+    UndefinedVariable(String),
 }
 
 impl<'a> AstParser<'a> {
@@ -460,7 +462,7 @@ impl<'a> AstParser<'a> {
         }
         self.consume(TokenKind::RightBrace)?;
 
-        let statement = FunctionDeclareStatement::new(fun_name, args, statements, FunctionKind::Function, false);
+        let statement = FunctionDeclareStatement::new(fun_name, args, statements, FunctionKind::Function);
 
         return Ok(statement.into())
     }

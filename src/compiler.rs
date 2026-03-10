@@ -8,6 +8,7 @@ pub mod varint;
 pub mod vm;
 pub mod compiler;
 pub mod int_types;
+pub mod garbage_collector;
 
 
 

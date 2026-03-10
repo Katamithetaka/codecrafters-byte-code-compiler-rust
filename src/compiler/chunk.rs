@@ -1,16 +1,15 @@
-use std::{fmt::Display, rc::Rc};
 
 use crate::{
     compiler::{
-        instructions::disassemble_instruction, int_types::line_type, varint::Varint
+        garbage_collector::Heap, instructions::disassemble_instruction, int_types::line_type, varint::Varint
     },
     expressions::Value,
 };
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct Chunk<S> {
+#[derive(Debug,  Clone)]
+pub struct Chunk {
     pub code: Vec<u8>,
-    pub constants: Vec<Value<S>>,
+    pub constants: Vec<Value>,
     pub lines: Vec<(line_type, usize)>,
 }
 
@@ -18,7 +17,7 @@ pub struct Chunk<S> {
 
 
 
-impl<S> Chunk<S> {
+impl Chunk {
     pub fn new() -> Self {
         return Self {
             code: vec![],
@@ -27,7 +26,7 @@ impl<S> Chunk<S> {
         };
     }
 
-    pub fn add_constant(&mut self, value: Value<S>) -> Varint {
+    pub fn add_constant(&mut self, value: Value) -> Varint {
         self.constants.push(value);
         return Varint((self.constants.len() - 1) as u32);
     }
@@ -59,39 +58,28 @@ impl<S> Chunk<S> {
         return self.lines[line_index].0;
     }
 
-    pub fn disassemble(self: Rc<Chunk<S>>, name: &str) where S: Display {
+    pub fn disassemble(self: &Chunk, heap: &Heap, name: &str) {
         eprintln!("== {} ==", name);
         let mut i = 0;
         let mut previous = i;
         while i < self.code.len() {
             let tmp = i;
-            i = disassemble_instruction(Rc::clone(&self), i, previous);
+            i = disassemble_instruction(heap, &self, i, previous);
             previous = tmp;
         }
     }
 }
 
-impl<S: PartialEq> Chunk<S> {
-    pub fn get_constant(&mut self, value: &Value<S>) -> Option<Varint> {
+impl Chunk {
+    pub fn get_constant(&mut self, value: &Value) -> Option<Varint> {
         self.constants.iter().position(|e| e == value).map(|v| {
             return Varint(v as u32);
         })
     }
 }
 
-impl<S> Default for Chunk<S> {
+impl Default for Chunk {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-
-impl Into<Chunk<String>> for Chunk<&str> {
-    fn into(self) -> Chunk<String> {
-        let Chunk { code, constants, lines } = self;
-        let constants = constants.into_iter().map(|v| v.into()).collect::<Vec<Value<String>>>();
-        Chunk {
-            code, constants, lines
-        }
     }
 }

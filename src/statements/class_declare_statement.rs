@@ -1,10 +1,10 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    ParserError, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}, int_types::{line_type, register_index_type}}, expressions::{
+    ParserError, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}, garbage_collector::{FunctionKind, GcClass, HeapObject}, int_types::{line_type, register_index_type}}, expressions::{
         Value,
         identifier::Identifier,
-    }, prelude::FunctionDeclareStatement, statements::Statement, value::class::Class
+    }, prelude::FunctionDeclareStatement, statements::Statement
 };
 
 #[derive(Debug)]
@@ -39,7 +39,7 @@ impl<'a> CodeGenerator<'a> for ClassDeclareStatement<'a> {
 
 
 
-        compiler.borrow_mut().declare_function(self.ident.token, self.ident.line as line_type);
+        compiler.borrow_mut().declare_function(self.ident.token);
         compiler.borrow_mut().mark_declared(self.ident.token.to_string());
 
         let mut c = compiler.borrow_mut();
@@ -58,9 +58,16 @@ impl<'a> CodeGenerator<'a> for ClassDeclareStatement<'a> {
         let constant = compiler.borrow_mut().add_constant(Value::Null);
 
 
-        let class = Class::new(self.ident.token.to_string());
         let func_dst = self.next_dst(1, dst_reg, &reserved_registers);
 
+        let class = HeapObject::Class(GcClass {
+            methods: Vec::with_capacity(self.functions.len()),
+            name: Value::String(compiler.borrow_mut().heap().borrow_mut().alloc(HeapObject::String(self.ident.token.to_string()))),
+            base_class: None,
+            constructor: None,
+        });
+
+        let class = compiler.borrow_mut().heap().borrow_mut().alloc(class);
 
         compiler.borrow_mut().chunk.constants[constant.0 as usize] = Value::Class(class);
 
@@ -68,11 +75,11 @@ impl<'a> CodeGenerator<'a> for ClassDeclareStatement<'a> {
 
         compiler.borrow_mut().write_stack_push(self.ident.line);
 
-        eprintln!("Got here 1!");
         for func in self.functions.iter_mut() {
-            func.function_kind = crate::value::callable::FunctionKind::Method;
-            func.is_derived_class_method = self.inherited_class.is_some();
-            compiler.borrow_mut().declare_function(func.ident.token, func.ident.line as line_type);
+            func.function_kind = FunctionKind::Method {
+                is_derived: self.inherited_class.is_some()
+            };
+            compiler.borrow_mut().declare_function(func.ident.token);
             compiler.borrow_mut().write_declare_local(0, func.ident.line as line_type);
 
             func.write_expression(compiler.clone(), Some(func_dst), reserved_registers.clone())?;
@@ -80,7 +87,6 @@ impl<'a> CodeGenerator<'a> for ClassDeclareStatement<'a> {
             compiler.borrow_mut().write_method_declare(func_dst, dst_reg, self.ident.line as line_type);
 
         }
-        eprintln!("Got here 2!");
 
         if let Some(inherited) = &self.inherited_class {
 

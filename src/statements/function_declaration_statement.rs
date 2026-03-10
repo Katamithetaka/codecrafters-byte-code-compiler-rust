@@ -1,10 +1,10 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    ParserError, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}, int_types::{line_type, register_index_type}}, expressions::{
-        Function, Value,
+    ParserError, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}, garbage_collector::{FunctionKind, GcFunction, HeapObject}, int_types::{line_type, register_index_type}}, expressions::{
+        Value,
         identifier::Identifier,
-    }, statements::{Statement, Statements}, value::callable::FunctionKind
+    }, statements::{Statement, Statements}
 };
 
 #[derive(Debug)]
@@ -13,7 +13,6 @@ pub struct FunctionDeclareStatement<'a> {
     pub args: Vec<Identifier<'a>>,
     pub statements: Vec<Statements<'a>>,
     pub function_kind: FunctionKind,
-    pub is_derived_class_method: bool,
 
 }
 impl<'a> FunctionDeclareStatement<'a> {
@@ -22,14 +21,12 @@ impl<'a> FunctionDeclareStatement<'a> {
         args: Vec<Identifier<'a>>,
         statements: Vec<Statements<'a>>,
         function_kind: FunctionKind,
-        is_derived_class_method: bool,
     ) -> Self {
         Self {
             ident,
             args,
             statements,
             function_kind,
-            is_derived_class_method
         }
     }
 }
@@ -46,7 +43,7 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
         let mut chunk = compiler.borrow_mut();
 
         // Declare the function name in the parent scope
-        chunk.declare_function(self.ident.token, self.ident.line as line_type);
+        chunk.declare_function(self.ident.token);
         chunk.mark_declared(self.ident.token.to_string());
 
         match chunk.resolve_variable(self.ident.token)? {
@@ -62,12 +59,30 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
         drop(chunk);
 
         // Create a new nested compiler for the function body
-        let fn_compiler = Compiler::with_parent(Rc::clone(&compiler), self.ident.token.to_string(), self.function_kind, self.is_derived_class_method);
+        let fn_compiler = Compiler::with_parent(Rc::clone(&compiler), self.ident.token.to_string(), self.function_kind);
 
-        if self.function_kind == FunctionKind::Method {
+
+
+        // Add parameters as locals in the nested compiler
+        for arg in &self.args {
+            let mut fn_compiler = fn_compiler.borrow_mut();
+            match fn_compiler.declare_variable(arg.token) {
+                Ok(_) => {},
+                Err(_) => {
+                    Err(ParserError {
+                        error: crate::ast_parser::ParserErrorDetails::VariableRedeclaration,
+                        line: self.ident.line,
+                    })?
+                },
+            }
+            fn_compiler.locals.last_mut().unwrap().depth = fn_compiler.scope_depth;
+        }
+
+        // add this and super
+        if let FunctionKind::Method { is_derived } = self.function_kind {
             let mut fn_compiler = fn_compiler.borrow_mut();
 
-            match fn_compiler.declare_variable("this", self.ident.line as line_type) {
+            match fn_compiler.declare_variable("this") {
                 Ok(_) => {},
                 Err(_) => {
                     Err(ParserError {
@@ -80,8 +95,8 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
             let scope_depth = fn_compiler.scope_depth;
             fn_compiler.locals.last_mut().unwrap().depth = scope_depth;
 
-            if self.is_derived_class_method {
-                match fn_compiler.declare_variable("super", self.ident.line as line_type) {
+            if is_derived {
+                match fn_compiler.declare_variable("super") {
                     Ok(_) => {},
                     Err(_) => {
                         Err(ParserError {
@@ -96,21 +111,6 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
             fn_compiler.locals.last_mut().unwrap().depth = scope_depth;
 
         }
-
-        // Add parameters as locals in the nested compiler
-        for arg in &self.args {
-            let mut fn_compiler = fn_compiler.borrow_mut();
-            match fn_compiler.declare_variable(arg.token, self.ident.line as line_type) {
-                Ok(_) => {},
-                Err(_) => {
-                    Err(ParserError {
-                        error: crate::ast_parser::ParserErrorDetails::VariableRedeclaration,
-                        line: self.ident.line,
-                    })?
-                },
-            }
-            fn_compiler.locals.last_mut().unwrap().depth = fn_compiler.scope_depth;
-        }
         // Compile the function body in the nested compiler
         let mut wrote_return = false;
 
@@ -118,7 +118,7 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
             if let Statements::FunctionDeclareStatement(func) = statement {
                 let mut fn_compiler = fn_compiler.borrow_mut();
 
-                fn_compiler.declare_function(func.ident.token, func.ident.line as line_type);
+                fn_compiler.declare_function(func.ident.token);
                 fn_compiler.write_declare_local(0, func.ident.line as line_type);
 
             }
@@ -142,21 +142,24 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
             fn_compiler.write_function_return(self.ident.line as line_type);
         }
 
+        let Compiler { chunk, upvalues, .. } = RefCell::into_inner(Rc::into_inner(fn_compiler).unwrap());
+
         // Create the function object (with its upvalue count)
-        let function = Function::new(
-            self.ident.token.to_string(),
-            self.args.len() as u8,
-            Rc::new(fn_compiler.borrow().chunk.clone().into()),
-            self.function_kind,
-            self.is_derived_class_method,
-        );
+        let function = GcFunction {
+            name: Value::String(compiler.borrow().heap().borrow_mut().alloc(HeapObject::String(self.ident.token.to_string()))),
+            arguments_count: self.args.len() as u8,
+            chunk: Box::leak(Box::new(chunk)),
+            function_kind: self.function_kind,
+        };
+
+        let f = Value::Function(compiler.borrow().heap().borrow_mut().alloc(HeapObject::Function(function)));
 
         let mut compiler = compiler.borrow_mut();
-        let constant = compiler.add_constant(Value::Function(function));
+        let constant = compiler.add_constant(f);
 
 
 
-        compiler.write_closure(dst_reg, constant, &fn_compiler.borrow().upvalues, self.ident.line as line_type);
+        compiler.write_closure(dst_reg, constant, &upvalues, self.ident.line as line_type);
 
         // Assign the function to the declared variable
         match compiler.resolve_variable(self.ident.token)? {

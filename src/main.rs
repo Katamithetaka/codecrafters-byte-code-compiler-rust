@@ -2,6 +2,7 @@
 use interpreter::compiler::CodeGenerator;
 use interpreter::compiler::compiler::Compiler;
 use interpreter::compiler::instructions::Instructions;
+use interpreter::compiler::int_types::global_index_type;
 use interpreter::compiler::vm::interpret;
 use interpreter::global_functions::register_global_functions;
 use interpreter::prelude::EvaluateError;
@@ -129,12 +130,17 @@ fn main() {
                     std::process::exit(70)
                 }
             }
+            chunk.borrow_mut().write_print(0, 123);
+            chunk.borrow_mut().write_instruction(Instructions::Return, 123);
+            chunk.borrow_mut().disassemble("eval chunk");
 
-            let mut chunk = Rc::into_inner(chunk).unwrap().into_inner();
-            chunk.write_print(0, 123);
-            chunk.write_instruction(Instructions::Return, 123);
-            chunk.disassemble("eval chunk");
-            match interpret(Rc::new(chunk.chunk.into())) {
+            let Compiler { chunk, heap, globals, .. }= Rc::into_inner(chunk).unwrap().into_inner();
+            let globals_count = globals.unwrap().len();
+            let heap = heap.unwrap();
+            let heap = Rc::into_inner(heap).unwrap().into_inner();
+
+
+            match interpret(Box::leak(Box::new(chunk)), globals_count as global_index_type, heap) {
                 Ok(()) => {}
                 Err(err) => {
                     eprintln!("{err}");
@@ -191,12 +197,17 @@ fn main() {
                 }
             }
 
-            let mut chunk = Rc::into_inner(chunk).unwrap().into_inner();
+            chunk.borrow_mut().write_instruction(Instructions::Return, 123);
+            chunk.borrow().disassemble("eval chunk");
 
-            chunk.write_instruction(Instructions::Return, 123);
-            chunk.disassemble("eval chunk");
+            let Compiler { chunk, heap, globals, .. }= Rc::into_inner(chunk).unwrap().into_inner();
+            let globals_count = globals.unwrap().len();
+            let heap = heap.unwrap();
+            let heap = Rc::into_inner(heap).unwrap().into_inner();
+
+
             eprintln!("~eval chunk");
-            match interpret(Rc::new(chunk.chunk.into())) {
+            match interpret(Box::leak(Box::new(chunk)), globals_count as global_index_type, heap) {
                 Ok(()) => {}
                 Err(err) => {
                     eprintln!("{err}");

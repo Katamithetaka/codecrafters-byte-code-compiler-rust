@@ -1,6 +1,6 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use crate::{compiler::{CodeGenerator, compiler::{Compiler}, int_types::{line_type, register_index_type}}, expressions::{Expression, Expressions, get_expression::GetExpression}, value::Value};
+use crate::{compiler::{CodeGenerator, compiler::Compiler, garbage_collector::HeapObject, int_types::{line_type, register_index_type}}, expressions::{Expression, Expressions, get_expression::GetExpression}, value::Value};
 
 #[derive(Debug)]
 pub struct SetExpression<'a> {
@@ -42,7 +42,11 @@ impl<'a> CodeGenerator<'a> for SetExpression<'a> {
         let value_register = self.next_dst(dist, 1, &reserved_registers);
         self.rhs.write_expression(chunk.clone(), Some(value_register), reserved_registers.clone())?;
         self.lhs.lhs.write_expression(chunk.clone(), Some(dist), reserved_registers)?;
-        let constant = chunk.borrow_mut().get_or_write_constant(Value::String(self.lhs.rhs.token), self.line_number());
+
+        let str = HeapObject::String(self.lhs.rhs.token.to_string());
+        let constant_v = chunk.borrow().heap().borrow_mut().alloc(str);
+
+        let constant = chunk.borrow_mut().get_or_write_constant(Value::String(constant_v), self.line_number());
         chunk.borrow_mut().write_set_field(constant, value_register, dist, self.line_number());
 
         Ok(())

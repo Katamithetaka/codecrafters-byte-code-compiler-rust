@@ -1,6 +1,6 @@
 use std::{cell::RefCell,  rc::Rc};
 
-use crate::{ParserError, compiler::{instructions::{Instructions, disassemble_instruction}, int_types::{instruction_length_type, line_type, register_index_type, stack_index_type}, varint::Varint}, expressions::Value, prelude::{Chunk, EvaluateError}, value::callable::FunctionKind};
+use crate::{ParserError, compiler::{garbage_collector::{FunctionKind, Heap}, instructions::{Instructions, disassemble_instruction}, int_types::{global_index_type, instruction_length_type, line_type, register_index_type, stack_index_type}, varint::Varint}, expressions::Value, prelude::{Chunk, EvaluateError}};
 
 #[allow(unused)]
 #[derive(Debug, Clone)]
@@ -9,6 +9,11 @@ pub struct Local {
     pub depth: i32,
     pub is_captured: bool,
     pub is_predeclared: bool
+}
+
+#[derive(Debug, Clone)]
+pub struct Global {
+    pub name: String,
 }
 
 #[allow(unused)]
@@ -20,7 +25,7 @@ pub struct UpvalueDesc {
 
 #[allow(unused)]
 pub struct Compiler<'a> {
-    pub chunk: Chunk<&'a str>,
+    pub chunk: Chunk,
 
     pub locals: Vec<Local>,
     pub upvalues: Vec<UpvalueDesc>,
@@ -28,15 +33,15 @@ pub struct Compiler<'a> {
     pub scope_depth: i32,
     pub enclosing: Option<Rc<RefCell<Compiler<'a>>>>,
     pub function_kind: Option<FunctionKind>,
-    pub is_derived_class_method: bool,
     pub function_name: Option<String>,
-    globals: Option<Vec<String>>
+    pub heap: Option<Rc<RefCell<Heap>>>,
+    pub globals: Option<Vec<String>>
 }
 
 pub enum ResolvedVar {
     Local(stack_index_type),
     Upvalue(stack_index_type),
-    Global(Varint),
+    Global(global_index_type),
 }
 
 impl<'a> Compiler<'a> {
@@ -50,11 +55,11 @@ impl<'a> Compiler<'a> {
             globals: Some(Vec::new()),
             function_kind: None,
             function_name: None,
-            is_derived_class_method: false,
+            heap: Some(Rc::new(RefCell::new(Heap::new()))),
         }))
     }
 
-    pub fn with_parent(compiler: Rc<RefCell<Compiler<'a>>>, function_name: String, function_kind: FunctionKind, is_derived_class_method: bool) -> Rc<RefCell<Self>> {
+    pub fn with_parent(compiler: Rc<RefCell<Compiler<'a>>>, function_name: String, function_kind: FunctionKind) -> Rc<RefCell<Self>> {
         let compiler = Compiler {
             chunk: Chunk::new(),
             locals: Vec::new(),
@@ -64,7 +69,8 @@ impl<'a> Compiler<'a> {
             globals: None,
             function_kind: Some(function_kind),
             function_name: Some(function_name),
-            is_derived_class_method
+            heap: None,
+
         };
 
 
@@ -74,26 +80,32 @@ impl<'a> Compiler<'a> {
 
     pub fn is_in_method(&self) -> bool {
         match self.function_kind {
-            Some(c) => c == FunctionKind::Method || self.enclosing.as_ref().unwrap().borrow().is_in_method(),
+            Some(FunctionKind::Method { .. }) =>  true,
+            Some(_) => self.enclosing.as_ref().unwrap().borrow().is_in_method(),
             None => false,
         }
     }
 
     pub fn is_in_derived_method(&self) -> bool {
         match self.function_kind {
-            Some(c) => (c == FunctionKind::Method && self.is_derived_class_method) || self.enclosing.as_ref().unwrap().borrow().is_in_derived_method(),
+            Some(FunctionKind::Method { is_derived }) if is_derived =>  true,
+            Some(_) => self.enclosing.as_ref().unwrap().borrow().is_in_method(),
             None => false,
         }
     }
 
     pub fn is_in_constructor(&self) -> bool {
         match (self.function_kind, &self.function_name) {
-            (Some(c), Some(function_name)) => c == FunctionKind::Method && function_name == "init",
+            (Some(FunctionKind::Method { .. }), Some(function_name)) => function_name == "init",
             _ => false,
         }
     }
 
-    fn add_global(&mut self, name: String) {
+    pub fn add_global(&mut self, name: String) {
+        if self.has_global(&name) {
+            return
+        }
+
         match &self.enclosing {
             Some(enclosing) => enclosing.borrow_mut().add_global(name),
             None => self.globals.as_mut().unwrap().push(name),
@@ -107,15 +119,40 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    pub fn get_constant(&mut self, value: &Value<&'a str>) -> Option<Varint> {
+    fn global_index(&self, name: &String) -> global_index_type {
+        match &self.enclosing {
+            Some(enclosing) => enclosing.borrow().global_index(name),
+            None => self.globals.as_ref().unwrap().iter().position(|c| c == name).unwrap() as global_index_type,
+        }
+    }
+
+    pub fn globals_count(&self) -> global_index_type {
+        for global in self.globals.iter() {
+            println!("{:?}", global)
+        }
+        match &self.enclosing {
+            Some(enclosing) => enclosing.borrow().globals_count(),
+            None => self.globals.as_ref().unwrap().iter().len() as global_index_type
+        }
+    }
+
+    pub fn get_constant(&mut self, value: &Value) -> Option<Varint> {
         return self.chunk.get_constant(value)
     }
 
-    pub fn add_constant(&mut self, value: Value<&'a str>) -> Varint {
+    pub fn add_constant(&mut self, value: Value) -> Varint {
         return self.chunk.add_constant(value)
     }
 
-    pub fn get_or_write_constant(&mut self, value: Value<&'a str>, line: line_type) -> Varint {
+    pub fn heap(&self) -> Rc<RefCell<Heap>> {
+        match &self.enclosing {
+            Some(enclosing) => enclosing.borrow().heap(),
+            None => self.heap.as_ref().unwrap().clone()
+        }
+    }
+
+
+    pub fn get_or_write_constant(&mut self, value: Value, line: line_type) -> Varint {
         match self.get_constant(&value) {
             Some(constant) => constant,
             None => {
@@ -218,10 +255,8 @@ impl<'a> Compiler<'a> {
         self.write_bytes(&register_index.to_be_bytes(), line);
     }
 
-    pub fn declare_variable(&mut self, name: &'a str, line: line_type) -> Result<(), ()> {
+    pub fn declare_variable(&mut self, name: &'a str) -> Result<(), ()> {
         if self.scope_depth == 0 && !self.enclosing.is_some() {
-            self
-                .get_or_write_constant(Value::String(name), line);
             self.add_global(name.to_string());
         } else {
             if self.locals.iter().any(|f| f.name == name.to_string() && f.depth == self.scope_depth) {
@@ -233,10 +268,8 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    pub fn declare_function(&mut self, name: &'a str, line: line_type)  {
+    pub fn declare_function(&mut self, name: &'a str)  {
         if self.scope_depth == 0 && !self.enclosing.is_some() {
-            self
-                .get_or_write_constant(Value::String(name), line);
             self.add_global(name.to_string());
         } else {
             if self.locals.iter().any(|f| f.name == name.to_string()) {
@@ -246,10 +279,10 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    pub fn write_declare_global(&mut self, ident: Varint, value_register: register_index_type, line: line_type) -> usize {
+    pub fn write_declare_global(&mut self, ident: global_index_type, value_register: register_index_type, line: line_type) {
         self.write_instruction(Instructions::DefineGlobal, line);
         self.write_bytes(&value_register.to_be_bytes(), line);
-        ident.write_bytes(self, line)
+        self.write_bytes(&ident.to_be_bytes(), line);
     }
 
     pub fn write_declare_local(&mut self, value_register: register_index_type, line: line_type) {
@@ -289,16 +322,16 @@ impl<'a> Compiler<'a> {
 
 
 
-    pub fn write_set_global(&mut self, ident: Varint, value_register: register_index_type, line: line_type) {
+    pub fn write_set_global(&mut self, index: global_index_type, value_register: register_index_type, line: line_type) {
         self.write_instruction(Instructions::SetGlobal, line);
         self.write_bytes(&value_register.to_be_bytes(), line);
-        ident.write_bytes(self, line);
+        self.write_bytes(&index.to_be_bytes(), line);
     }
 
-    pub fn write_get_global(&mut self, ident: Varint, dst_register: register_index_type, line: line_type) -> usize {
+    pub fn write_get_global(&mut self, index: global_index_type, dst_register: register_index_type, line: line_type) {
         self.write_instruction(Instructions::GetGlobal, line);
         self.write_bytes(&dst_register.to_be_bytes(), line);
-        ident.write_bytes(self, line)
+        self.write_bytes(&index.to_be_bytes(), line);
     }
 
     pub fn write_get_field(&mut self, ident: Varint, dst_register: register_index_type, line: line_type) -> usize {
@@ -320,11 +353,6 @@ impl<'a> Compiler<'a> {
         self.write_bytes(&dst_register.to_be_bytes(), line);
     }
 
-    pub fn write_function_init(&mut self, func_register: register_index_type, line: line_type) {
-        self.write_instruction(Instructions::InitFunction, line);
-        self.write_bytes(&func_register.to_be_bytes(), line);
-
-    }
 
     pub fn write_function_return(&mut self, line: line_type) {
         self.write_instruction(Instructions::FunctionReturn, line);
@@ -384,7 +412,7 @@ impl<'a> Compiler<'a> {
         let mut previous = i;
         while i < self.chunk.code.len() {
             let tmp = i;
-            i = disassemble_instruction(Rc::new(self.chunk.clone()), i, previous);
+            i = disassemble_instruction(&self.heap().borrow(), &self.chunk, i, previous);
             previous = tmp;
         }
     }
@@ -406,24 +434,16 @@ impl<'a> Compiler<'a> {
         }
 
         if self.has_global(&name.to_string()) {
-            let global = self.get_or_write_constant(
-                Value::String(name),
-                0,
-            );
-
-            return Ok(ResolvedVar::Global(global))
+            return Ok(ResolvedVar::Global(  self.global_index(&name.to_string())))
         }
 
         if let Some(up) = self.resolve_predeclared_upvalue(name) {
             return Ok(ResolvedVar::Upvalue(up));
         }
 
-        let global = self.get_or_write_constant(
-            Value::String(name),
-            0,
-        );
+        self.add_global(name.to_string());
 
-        return Ok(ResolvedVar::Global(global))
+        return Ok(ResolvedVar::Global(self.global_index(&name.to_string())))
     }
 
     fn resolve_full_upvalue(&mut self, name: &str) -> Option<stack_index_type> {

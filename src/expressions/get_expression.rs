@@ -1,6 +1,6 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use crate::{compiler::{CodeGenerator, compiler::{Compiler}, int_types::{line_type, register_index_type}}, expressions::{Expression, Expressions}, prelude::Identifier, value::Value};
+use crate::{compiler::{CodeGenerator, compiler::Compiler, garbage_collector::HeapObject, int_types::{line_type, register_index_type}}, expressions::{Expression, Expressions}, prelude::Identifier, value::Value};
 
 #[derive(Debug)]
 pub struct GetExpression<'a> {
@@ -38,9 +38,13 @@ impl<'a> CodeGenerator<'a> for GetExpression<'a> {
         reserved_registers: Vec<register_index_type>
     ) -> crate::compiler::Result {
         let dist = self.dst_or_default(dst_register, &reserved_registers);
-
         self.lhs.write_expression(chunk.clone(), Some(dist), reserved_registers.clone())?;
-        let constant = chunk.borrow_mut().get_or_write_constant(Value::String(self.rhs.token), self.line_number());
+
+
+        let str = HeapObject::String(self.rhs.token.to_string());
+        let constant_v = chunk.borrow().heap().borrow_mut().alloc(str);
+
+        let constant = chunk.borrow_mut().get_or_write_constant(Value::String(constant_v), self.line_number());
         chunk.borrow_mut().write_get_field(constant, dist, self.line_number());
 
 

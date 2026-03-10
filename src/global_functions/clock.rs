@@ -1,6 +1,6 @@
 use crate::expressions::Value;
 
-pub fn execute(_: Vec<Value<String>>) -> Value<String> {
+pub fn execute(_: Vec<Value>) -> Value {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     let now = SystemTime::now();

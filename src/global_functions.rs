@@ -3,7 +3,7 @@
 
 use std::rc::Rc;
 
-use crate::{compiler::{compiler::Compiler}, value::{GlobalFunction, Value}};
+use crate::{compiler::{compiler::{Compiler, ResolvedVar}, garbage_collector::HeapObject}, value::{GlobalFunction, Value}};
 
 pub mod clock;
 
@@ -62,9 +62,18 @@ pub fn register_global_functions(chunk: &mut Compiler) {
     let functions = global_mods!(clock);
 
     for func in functions {
-        let name = chunk.add_constant(Value::String(func.name));
-        let constant = chunk.add_constant(Value::GlobalFunction(func));
-        chunk.write_load(0, constant, 0);
-        chunk.write_declare_global(name, 0, 0);
+
+        chunk.add_global(func.name.to_string());
+        match chunk.resolve_variable(func.name).unwrap() {
+
+            ResolvedVar::Global(varint) => {
+                let v = chunk.heap().borrow_mut().alloc(HeapObject::GlobalFunction(func));
+                let constant = chunk.add_constant(Value::GlobalFunction(v));
+                chunk.write_load(0, constant, 0);
+                chunk.write_declare_global(varint, 0, 0);
+            },
+            _ => unreachable!(),
+        }
+
     }
 }

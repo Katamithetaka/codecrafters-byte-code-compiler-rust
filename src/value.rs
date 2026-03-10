@@ -1,211 +1,73 @@
-pub mod callable;
-pub mod class;
-pub mod class_instance;
 
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use std::{ fmt::Display, rc::Rc};
 
-use crate::value::{callable::Callable, class::Class, class_instance::ClassInstance};
-pub use crate::{prelude::EvaluateErrorDetails, value::callable::{Closure, Function, GlobalFunction}};
+use crate::{compiler::garbage_collector::{Gc},};
+pub use crate::{prelude::EvaluateErrorDetails};
 
+/// Represents a global function that can be called from anywhere in the program.
+#[derive(Clone, Debug)]
+pub struct GlobalFunction {
+    /// A reference-counted function pointer to the callable implementation.
+    pub callable: Rc<fn(Vec<Value>) -> Value>,
+    /// The name of the global function.
+    pub name: &'static str,
+    /// The number of arguments the global function takes.
+    pub arguments_count: Option<u8>,
+}
+
+impl Display for GlobalFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<fn {}>", self.name)
+    }
+}
+
+impl PartialEq for GlobalFunction {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
 
 
 /// Represents a value in the interpreter, which can be one of several types.
-#[derive(Clone, PartialEq, Debug)]
-pub enum Value<S> {
-    /// A numeric value.
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum Value {
     Number(f64),
-    /// A string value.
-    String(S),
-    /// A null value.
+    String(Gc),
     Null,
-    /// A boolean value.
     Boolean(bool),
-    /// A user-defined function.
-    Function(Function<String>),
-    /// A global function.
-    GlobalFunction(GlobalFunction),
-    /// A reference-counted, mutable value.
-    Cell(Rc<RefCell<Value<S>>>),
-    Closure(Callable),
-    Class(Class),
-    Instance(ClassInstance)
+    Function(Gc),
+    GlobalFunction(Gc),
+    Closure(Gc),
+    Class(Gc),
+    Instance(Gc),
+    Cell(Gc)
 }
 
-impl<S: Display> Display for Value<S> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::Number(s) => write!(f, "{}", s),
-            Value::String(s) => write!(f, "{}", s),
-            Value::Null => f.write_str("nil"),
-            Value::Boolean(s) => write!(f, "{}", s),
-            Value::Function(s) => write!(f, "{}", s),
-            Value::GlobalFunction(s) => write!(f, "{}", s),
-            Value::Cell(s) => write!(f, "{}", s.borrow()),
-            Value::Closure(closure) => {
-                match closure {
-                    Callable::LoxFunction(closure) => write!(f, "{}", closure.function),
-                    Callable::BindedLoxFunction(_, closure) => write!(f, "{}", closure.function),
-                }
-            },
-            Value::Class(class) => write!(f, "{}", class),
-            Value::Instance(class) => write!(f, "{}", class),
+// impl Display for Value {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         match self {
+//             Value::Number(s) => write!(f, "{}", s),
+//             Value::String(s) => write!(f, "{}", s),
+//             Value::Null => f.write_str("nil"),
+//             Value::Boolean(s) => write!(f, "{}", s),
+//             Value::Function(s) => write!(f, "{}", s),
+//             Value::GlobalFunction(s) => write!(f, "{}", s),
+//             Value::Cell(s) => write!(f, "{}", s.borrow()),
+//             Value::Closure(closure) => {
+//                 match closure {
+//                     Callable::LoxFunction(closure) => write!(f, "{}", closure.function.borrow()),
+//                     Callable::BindedLoxFunction(_, closure) => write!(f, "{}", closure.function.borrow()),
+//                 }
+//             },
+//             Value::Class(class) => write!(f, "{}", class),
+//             Value::Instance(class) => write!(f, "{}", class),
 
-        }
-    }
-}
+//         }
+//     }
+// }
 
-impl<S> Default for Value<S> {
+impl Default for Value {
     fn default() -> Self {
         Value::Null
-    }
-}
-
-impl<S> Value<S> {
-    pub fn is_truthy(&self) -> bool {
-        match self {
-            Value::Null => false,
-            Value::Boolean(v) => *v,
-            Value::Cell(c) => c.borrow().is_truthy(),
-            _ => true,
-        }
-    }
-}
-
-impl<'a> From<Value<&'a str>> for Value<String> {
-    fn from(value: Value<&'a str>) -> Self {
-        match value {
-            Value::Number(a) => Value::Number(a),
-            Value::String(s) => Value::String(s.to_string()),
-            Value::Null => Value::Null,
-            Value::Boolean(b) => Value::Boolean(b),
-            Value::Function(b) => Value::Function(b),
-            Value::GlobalFunction(b) => Value::GlobalFunction(b),
-            Value::Cell(inner) => {
-                let new_inner = Rc::new(RefCell::new((*inner.borrow()).clone().into()));
-                Value::Cell(new_inner)
-            },
-            Value::Closure(_) => {
-                panic!("Closures can't exist at compile time therefore this conversion shouldn't happen!")
-            },
-            Value::Class(class) => Value::Class(class),
-            Value::Instance(class_instance) => Value::Instance(class_instance),
-        }
-    }
-}
-
-impl<S: ToString> Value<S> {
-    pub fn is_null(&self) -> bool {
-        match self {
-            Value::Null => true,
-            Value::Cell(cell) => cell.borrow().is_null(), // recursive unwrap
-            _ => false,
-        }
-    }
-
-    /// Recursively unwrap a number, even if it's inside a Cell
-    pub fn as_number(&self) -> Result<f64, EvaluateErrorDetails> {
-        match self {
-            Value::Number(a) => Ok(*a),
-            Value::Cell(cell) => cell.borrow().as_number(), // recursive unwrap
-            _ => Err(EvaluateErrorDetails::ExpectedNumber),
-        }
-    }
-
-    /// Recursively unwrap a string, even if it's inside a Cell
-    pub fn as_string(&self) -> Result<String, EvaluateErrorDetails> {
-        match self {
-            Value::String(a) => {
-                Ok(a.to_string())
-            }
-            Value::Cell(cell) => {
-                let borrow = cell.borrow();      // Ref<Value<S>>
-                // map Ref<Value<S>> -> Ref<S>
-                borrow.as_string()
-            }
-            _ => Err(EvaluateErrorDetails::ExpectedString),
-        }
-    }
-
-    /// Recursively unwrap an identifier
-    pub fn as_ident(&self) -> Result<String, EvaluateErrorDetails> {
-        self.as_string().map_err(|_| EvaluateErrorDetails::InvalidIdentifierType)
-    }
-
-    /// Recursively unwrap for binary number operations
-    pub fn as_binary_number_op(&self) -> Result<f64, EvaluateErrorDetails> {
-        self.as_number().map_err(|_| EvaluateErrorDetails::BinaryNumberOp)
-    }
-
-    pub fn as_add_op(&self) -> Result<Value<String>, EvaluateErrorDetails> {
-        match self {
-            Value::Number(f) => Ok(Value::Number(f.clone())),
-            Value::String(f) => Ok(Value::String(f.to_string())),
-            Value::Cell(c) => c.borrow().as_add_op(),
-            _ => return Err(EvaluateErrorDetails::UnmatchedTypes),
-        }
-    }
-
-    /// Recursively unwrap a function
-    pub fn as_function(&self) -> Result<Function<String>, EvaluateErrorDetails> {
-        match self {
-            Value::Function(f) => Ok(f.clone()),
-            Value::Cell(cell) => cell.borrow().as_function(), // recursive unwrap
-            _ => Err(EvaluateErrorDetails::ExpectedFunction),
-        }
-    }
-
-    /// Recursively unwrap a global function
-    pub fn as_global_function(&self) -> Result<GlobalFunction, EvaluateErrorDetails> {
-        match self {
-            Value::GlobalFunction(f) => Ok(f.clone()),
-            Value::Cell(cell) => cell.borrow().as_global_function(), // recursive unwrap
-            _ => Err(EvaluateErrorDetails::ExpectedFunction),
-        }
-    }
-
-    /// Recursively unwrap a global function
-    pub fn as_class_instance(&self) -> Result<ClassInstance, EvaluateErrorDetails> {
-        match self {
-            Value::Instance(f) => Ok(f.clone()),
-            Value::Cell(cell) => cell.borrow().as_class_instance(), // recursive unwrap
-            _ => Err(EvaluateErrorDetails::ExpectedFunction),
-        }
-    }
-}
-
-impl<S: Clone> Value<S> {
-    /// Upgrades a value to a Cell if it isn't already one, otherwise clones it.
-    /// This is useful for capturing values in closures that need shared mutability.
-    pub fn into_cell(self) -> Value<S> {
-        match self {
-            Value::Cell(cell) => Value::Cell(cell),
-            other => Value::Cell(Rc::new(RefCell::new(other))),
-        }
-    }
-
-    // Or if you want a version that works with references:
-    pub fn to_cell(&self) -> Value<S> {
-        match self {
-            Value::Cell(cell) => Value::Cell(cell.clone()),
-            other => Value::Cell(Rc::new(RefCell::new(other.clone()))),
-        }
-    }
-
-    pub fn set(&mut self, new_value: Value<S>) {
-        match self {
-            Value::Cell(cell) => {
-                *cell.borrow_mut() = new_value;
-            }
-            _ => {
-                *self = new_value;
-            }
-        }
-    }
-
-    pub fn inner(&self) -> Value<S> {
-        match self {
-            Value::Cell(cell) => cell.borrow().clone(),
-            _ => self.clone(),
-        }
     }
 }

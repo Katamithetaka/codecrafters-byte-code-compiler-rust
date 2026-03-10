@@ -1,7 +1,7 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
-    Token, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}, int_types::{line_type, register_index_type}}, expressions::Expression, prelude::{EvaluateError, Identifier}, value::{EvaluateErrorDetails, Value, callable::FunctionKind}
+    Token, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}, garbage_collector::HeapObject, int_types::{line_type, register_index_type}}, expressions::Expression, prelude::{EvaluateError, Identifier}, value::{EvaluateErrorDetails, Value}
 };
 
 
@@ -53,7 +53,11 @@ impl<'a> CodeGenerator<'a> for Super<'a> {
 
         let mut chunk = chunk.borrow_mut();
 
-        let constant = chunk.get_or_write_constant(Value::String(self.identifier.token), self.identifier.line);
+        let str = HeapObject::String(self.identifier.token.to_string());
+        let constant_v = chunk.heap().borrow_mut().alloc(str);
+
+        let constant = chunk.get_or_write_constant(Value::String(constant_v), self.line_number());
+
         let value_register = self.next_dst(dst, 1, &reserved_registers);
 
 
@@ -68,9 +72,12 @@ impl<'a> CodeGenerator<'a> for Super<'a> {
                 chunk.write_get_global(slot, this_register, self.line as line_type);
             }
             ResolvedVar::Local(slot) => {
+                eprintln!("Resolved this as {slot}");
                 chunk.write_get_local(this_register, slot, self.line as line_type);
             }
             ResolvedVar::Upvalue(slot) => {
+                eprintln!("Resolved this as upvalue {slot}");
+
                 chunk.write_get_upvalue(this_register, slot, self.line as line_type);
             }
         }
@@ -82,9 +89,13 @@ impl<'a> CodeGenerator<'a> for Super<'a> {
                 chunk.write_get_global(slot, super_register, self.line as line_type);
             }
             ResolvedVar::Local(slot) => {
+                eprintln!("Resolved super as {slot}");
+
                 chunk.write_get_local(super_register, slot, self.line as line_type);
             }
             ResolvedVar::Upvalue(slot) => {
+                eprintln!("Resolved super as upvalue {slot}");
+
                 chunk.write_get_upvalue(super_register, slot, self.line as line_type);
             }
         }

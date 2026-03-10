@@ -30,7 +30,7 @@ impl<'a> CodeGenerator<'a> for DeclareStatement<'a> {
 
 
 
-        match chunk.borrow_mut().declare_variable(self.ident.token, self.ident.line as line_type) {
+        match chunk.borrow_mut().declare_variable(self.ident.token) {
             Ok(_) => {},
             Err(_) => {
                 Err(ParserError {

@@ -21,4 +21,4 @@ set -e # Exit early if any commands fail
 #
 # - Edit this to change how your program runs locally
 # - Edit .codecrafters/run.sh to change how your program runs remotely
-RUST_BACKTRACE=full exec /tmp/codecrafters-build-interpreter-rust/release/codecrafters-interpreter "$@"
+exec /tmp/codecrafters-build-interpreter-rust/release/codecrafters-interpreter "$@"

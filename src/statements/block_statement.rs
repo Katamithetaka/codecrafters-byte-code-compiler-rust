@@ -39,7 +39,7 @@ impl<'a> CodeGenerator<'a> for BlockStatement<'a> {
 
         for statement in  &mut self.statements {
             if let Statements::FunctionDeclareStatement(func) = statement {
-                chunk.borrow_mut().declare_function(func.ident.token, func.ident.line as line_type);
+                chunk.borrow_mut().declare_function(func.ident.token);
                 chunk.borrow_mut().write_declare_local(0, func.ident.line as line_type);
 
             }

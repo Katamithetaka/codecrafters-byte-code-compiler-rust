@@ -2,7 +2,7 @@ use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
     Token,
-    compiler::{CodeGenerator,  compiler::Compiler, int_types::{line_type, register_index_type}},
+    compiler::{CodeGenerator, compiler::Compiler, garbage_collector::HeapObject, int_types::{line_type, register_index_type}},
     expressions::{Expression, Value},
     scanner::{Keyword, TokenKind, TokenValue},
 };
@@ -56,8 +56,11 @@ impl<'a> CodeGenerator<'a> for Literal<'a> {
             },
             TokenKind::String => match self.token.value {
                 TokenValue::String(v) => {
+
+                    let str = HeapObject::String(v.to_string());
+                    let constant_v = chunk.heap().borrow_mut().alloc(str);
                     let constant =
-                        chunk.get_or_write_constant(Value::String(v), self.line_number());
+                        chunk.get_or_write_constant(Value::String(constant_v), self.line_number());
                     constant
                 }
                 _ => panic!("Got null token when evaluating literal"),
