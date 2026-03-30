@@ -46,7 +46,7 @@ impl<'a> CodeGenerator<'a> for ReturnStatement<'a> {
         }
         else {
             let mut chunk = chunk.borrow_mut();
-            let constant = chunk.get_or_write_constant(Value::Null, self.line_number as line_type);
+            let constant = chunk.get_or_write_constant(Value::null(), self.line_number as line_type);
             chunk.write_load(0, constant, self.line_number as line_type);
         }
         let mut chunk = chunk.borrow_mut();

@@ -54,7 +54,7 @@ pub fn simple_instruction(name: &str, offset: usize) -> usize {
 pub fn constant_instruction(heap: &Heap, name: &str, chunk: &Chunk, offset: usize) -> usize {
     let (constant, o) = Varint::read_bytes(chunk, offset + 1);
     eprint!("{name:15} c{constant} ");
-    eprintln!("{}", heap.to_string(chunk.constants[constant as usize]));
+    eprintln!("{}", heap.to_string(chunk.constants[constant as usize]).unwrap());
 
     return offset + o + 1;
 }
@@ -64,7 +64,7 @@ pub fn constant_register_instruction(heap: &Heap, name: &str, chunk: &Chunk, mut
     let register = register_index_type::read(&chunk, &mut offset);
     let (constant, o) = Varint::read_bytes(&chunk, offset);
     eprint!("{name:15} r{} c{} ", register, constant);
-    eprintln!("{}", heap.to_string(chunk.constants[constant as usize]));
+    eprintln!("{}", heap.to_string(chunk.constants[constant as usize]).unwrap());
 
     return offset + o;
 }
@@ -85,7 +85,7 @@ pub fn constant_set_register_instruction(heap: &Heap, name: &str, chunk: &Chunk,
 
     let (constant, o) = Varint::read_bytes(&chunk, offset);
     eprint!("{name:15} r{}, r{} c{} ", value_register, dst_register, constant);
-    eprintln!("{}", heap.to_string(chunk.constants[constant as usize]));
+    eprintln!("{}", heap.to_string(chunk.constants[constant as usize]).unwrap());
 
     return offset + o;
 }
@@ -187,7 +187,7 @@ pub fn closure_instruction(heap: &Heap, name: &str, chunk: &Chunk, mut offset: u
     offset += bytes_read;
     let upvalues_count = chunk.code[offset];
     offset += 1;
-    let mut final_string = format!("{name:15} r{fn_register} c{constant} {} (upvalues count: {upvalues_count})", heap.to_string(chunk.constants[constant as usize]));
+    let mut final_string = format!("{name:15} r{fn_register} c{constant} {} (upvalues count: {upvalues_count})", heap.to_string(chunk.constants[constant as usize]).unwrap());
     for _ in 0..(upvalues_count as usize)  {
         let is_local = chunk.code[offset] != 0;
         offset += 1;
@@ -198,16 +198,18 @@ pub fn closure_instruction(heap: &Heap, name: &str, chunk: &Chunk, mut offset: u
     }
 
     eprintln!("{}", final_string);
-    let f = match heap.resolve(chunk.constants[constant as usize]) {
+    let f = match heap.resolve(chunk.constants[constant as usize]).unwrap() {
         crate::compiler::garbage_collector::ResolvedObject::Function(c) => c,
         _ => panic!("Closure constant wasn't a function!")
     };
 
     eprintln!("");
 
+    let name = heap.to_string(chunk.constants[constant as usize]).unwrap();
 
-    f.chunk.disassemble(heap, &format!("== {} ==", heap.to_string(chunk.constants[constant as usize])));
-    eprintln!("== ~{} ==", heap.to_string(chunk.constants[constant as usize]));
+
+    f.chunk.disassemble(heap, &format!("== {} ==", name));
+    eprintln!("== ~{} ==", name);
     eprintln!("");
 
     return offset;

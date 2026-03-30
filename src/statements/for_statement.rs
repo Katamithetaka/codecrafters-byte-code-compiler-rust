@@ -55,7 +55,7 @@ impl<'a> CodeGenerator<'a> for ForStatement<'a> {
         match self.test.as_mut() {
             Some(test) => test.write_expression(chunk.clone(), Some(dst), reserved_registers.clone()),
             None => {
-                let constant = chunk.borrow_mut().get_or_write_constant(Value::Boolean(true), self.begin_line as line_type);
+                let constant = chunk.borrow_mut().get_or_write_constant(Value::bool(true), self.begin_line as line_type);
                 chunk.borrow_mut().write_load(dst, constant, self.begin_line as line_type);
                 Ok(())
             },

@@ -68,7 +68,7 @@ pub fn register_global_functions(chunk: &mut Compiler) {
 
             ResolvedVar::Global(varint) => {
                 let v = chunk.heap().borrow_mut().alloc(HeapObject::GlobalFunction(func));
-                let constant = chunk.add_constant(Value::GlobalFunction(v));
+                let constant = chunk.add_constant(Value::global_fn(v));
                 chunk.write_load(0, constant, 0);
                 chunk.write_declare_global(varint, 0, 0);
             },

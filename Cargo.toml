@@ -11,6 +11,7 @@ name = "interpreter"
 
 [dependencies]
 anyhow = "1.0.68"                                # error handling
+arrayvec = "0.7.6"
 bytes = "1.3.0"                                  # helps manage buffers
 derive_more = {version = "2.1.1", features = ["display", "from", "try_into"]}
 hashbrown = "0.16.1"

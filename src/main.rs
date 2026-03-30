@@ -1,8 +1,13 @@
 #![allow(unused_variables)]
 use interpreter::compiler::CodeGenerator;
 use interpreter::compiler::compiler::Compiler;
+use interpreter::compiler::garbage_collector::Gc;
+use interpreter::compiler::garbage_collector::GcClosure;
 use interpreter::compiler::instructions::Instructions;
 use interpreter::compiler::int_types::global_index_type;
+use interpreter::compiler::int_types::register_index_type;
+use interpreter::compiler::int_types::stack_index_type;
+use interpreter::compiler::vm::CallFrame;
 use interpreter::compiler::vm::interpret;
 use interpreter::global_functions::register_global_functions;
 use interpreter::prelude::EvaluateError;
@@ -13,6 +18,13 @@ use std::fs;
 use std::rc::Rc;
 
 fn main() {
+    eprintln!("CallFrame:       {}", std::mem::size_of::<CallFrame>());
+    eprintln!("GcClosure:       {}", std::mem::size_of::<GcClosure>());
+    eprintln!("register_index:  {}", std::mem::size_of::<register_index_type>());
+    eprintln!("stack_index:     {}", std::mem::size_of::<stack_index_type>());
+    eprintln!("Gc:           {}", std::mem::size_of::<Gc>());
+    eprintln!("Option<Gc>:   {}", std::mem::size_of::<Option<Gc>>());
+
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         eprintln!("Usage: {} tokenize <filename>", args[0]);

@@ -38,7 +38,7 @@ impl<'a> CodeGenerator<'a> for IfStatement<'a> {
                 }
                 None => {
                     let mut chunk = chunk.borrow_mut();
-                    let constant = chunk.get_or_write_constant(Value::Boolean(true), *line as line_type);
+                    let constant = chunk.get_or_write_constant(Value::bool(true), *line as line_type);
                     chunk.write_load(dst, constant, *line as line_type);
                 }
             };

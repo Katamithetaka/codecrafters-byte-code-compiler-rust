@@ -49,7 +49,7 @@ impl<'a> CodeGenerator<'a> for Literal<'a> {
             TokenKind::Number => match self.token.value {
                 TokenValue::Number(v) => {
                     let constant =
-                        chunk.get_or_write_constant(Value::Number(v), self.line_number());
+                        chunk.get_or_write_constant(Value::number(v), self.line_number());
                     constant
                 }
                 _ => panic!("Got null token when evaluating literal"),
@@ -60,23 +60,23 @@ impl<'a> CodeGenerator<'a> for Literal<'a> {
                     let str = HeapObject::String(v.to_string());
                     let constant_v = chunk.heap().borrow_mut().alloc(str);
                     let constant =
-                        chunk.get_or_write_constant(Value::String(constant_v), self.line_number());
+                        chunk.get_or_write_constant(Value::string(constant_v), self.line_number());
                     constant
                 }
                 _ => panic!("Got null token when evaluating literal"),
             },
             TokenKind::Keyword(Keyword::True) => {
                 let constant =
-                    chunk.get_or_write_constant(Value::Boolean(true), self.line_number());
+                    chunk.get_or_write_constant(Value::bool(true), self.line_number());
                 constant
             }
             TokenKind::Keyword(Keyword::False) => {
                 let constant =
-                    chunk.get_or_write_constant(Value::Boolean(false), self.line_number());
+                    chunk.get_or_write_constant(Value::bool(false), self.line_number());
                 constant
             }
             TokenKind::Keyword(Keyword::Nil) => {
-                let constant = chunk.get_or_write_constant(Value::Null, self.line_number());
+                let constant = chunk.get_or_write_constant(Value::null(), self.line_number());
                 constant
             }
             _ => panic!("Invalid token considered as literal"),

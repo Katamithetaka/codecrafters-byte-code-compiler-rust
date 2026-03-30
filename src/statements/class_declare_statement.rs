@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    ParserError, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}, garbage_collector::{FunctionKind, GcClass, HeapObject}, int_types::{line_type, register_index_type}}, expressions::{
+    ParserError, compiler::{CodeGenerator, compiler::{Compiler, ResolvedVar}, garbage_collector::{FunctionKind, Gc, GcClass, HeapObject}, int_types::{line_type, register_index_type}}, expressions::{
         Value,
         identifier::Identifier,
     }, prelude::FunctionDeclareStatement, statements::Statement
@@ -55,21 +55,21 @@ impl<'a> CodeGenerator<'a> for ClassDeclareStatement<'a> {
         }
         drop(c);
 
-        let constant = compiler.borrow_mut().add_constant(Value::Null);
+        let constant = compiler.borrow_mut().add_constant(Value::null());
 
 
         let func_dst = self.next_dst(1, dst_reg, &reserved_registers);
 
         let class = HeapObject::Class(GcClass {
             methods: Vec::with_capacity(self.functions.len()),
-            name: Value::String(compiler.borrow_mut().heap().borrow_mut().alloc(HeapObject::String(self.ident.token.to_string()))),
-            base_class: None,
-            constructor: None,
+            name: compiler.borrow_mut().heap().borrow_mut().alloc(HeapObject::String(self.ident.token.to_string())),
+            base_class: Gc::NONE,
+            constructor: Gc::NONE,
         });
 
         let class = compiler.borrow_mut().heap().borrow_mut().alloc(class);
 
-        compiler.borrow_mut().chunk.constants[constant.0 as usize] = Value::Class(class);
+        compiler.borrow_mut().chunk.constants[constant.0 as usize] = Value::class(class);
 
         compiler.borrow_mut().write_load(dst_reg, constant, self.ident.line as line_type);
 

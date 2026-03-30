@@ -43,7 +43,7 @@ impl<'a> CodeGenerator<'a> for DeclareStatement<'a> {
         if let Some(expr) = &mut self.expr {
             expr.write_expression(chunk.clone(), Some(dist), reserved_registers)?;
         } else {
-            let constant = chunk.borrow_mut().get_or_write_constant(Value::Null, self.ident.line as line_type);
+            let constant = chunk.borrow_mut().get_or_write_constant(Value::null(), self.ident.line as line_type);
             chunk.borrow_mut().write_load(dist, constant, self.ident.line as line_type);
         };
 

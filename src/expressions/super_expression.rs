@@ -56,7 +56,7 @@ impl<'a> CodeGenerator<'a> for Super<'a> {
         let str = HeapObject::String(self.identifier.token.to_string());
         let constant_v = chunk.heap().borrow_mut().alloc(str);
 
-        let constant = chunk.get_or_write_constant(Value::String(constant_v), self.line_number());
+        let constant = chunk.get_or_write_constant(Value::string(constant_v), self.line_number());
 
         let value_register = self.next_dst(dst, 1, &reserved_registers);
 

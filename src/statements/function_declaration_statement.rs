@@ -137,7 +137,7 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
 
         if !wrote_return {
             let mut fn_compiler = fn_compiler.borrow_mut();
-            let null_const = fn_compiler.get_or_write_constant(Value::Null, self.ident.line as line_type);
+            let null_const = fn_compiler.get_or_write_constant(Value::null(), self.ident.line as line_type);
             fn_compiler.write_load(0, null_const, self.ident.line as line_type);
             fn_compiler.write_function_return(self.ident.line as line_type);
         }
@@ -146,13 +146,13 @@ impl<'a> CodeGenerator<'a> for FunctionDeclareStatement<'a> {
 
         // Create the function object (with its upvalue count)
         let function = GcFunction {
-            name: Value::String(compiler.borrow().heap().borrow_mut().alloc(HeapObject::String(self.ident.token.to_string()))),
+            name: compiler.borrow().heap().borrow_mut().alloc(HeapObject::String(self.ident.token.to_string())),
             arguments_count: self.args.len() as u8,
             chunk: Box::leak(Box::new(chunk)),
             function_kind: self.function_kind,
         };
 
-        let f = Value::Function(compiler.borrow().heap().borrow_mut().alloc(HeapObject::Function(function)));
+        let f = Value::function(compiler.borrow().heap().borrow_mut().alloc(HeapObject::Function(function)));
 
         let mut compiler = compiler.borrow_mut();
         let constant = compiler.add_constant(f);

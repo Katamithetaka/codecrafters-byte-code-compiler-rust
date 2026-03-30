@@ -5,7 +5,7 @@ use crate::{prelude::Chunk, value::{GlobalFunction, Value}};
 
 // A Gc handle is just an index - copying it is free
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Gc(u32);
+pub struct Gc(pub u32);
 
 // Everything that can live on the heap
 #[derive(Debug)]
@@ -47,7 +47,7 @@ pub enum FunctionKind {
 // that use Gc handles instead of Rc
 #[derive(Debug, Clone)]
 pub struct GcFunction {
-    pub name: Value,
+    pub name: Gc,
     pub arguments_count: u8,
     pub chunk: &'static Chunk,  // chunk can stay Rc for now
     pub function_kind: FunctionKind,
@@ -55,15 +55,15 @@ pub struct GcFunction {
 
 #[derive(Debug, Clone)]
 pub struct GcClass {
-    pub name: Value,
-    pub base_class: Option<Value>,
-    pub constructor: Option<Value>,
-    pub methods: Vec<(Value, Value)>,  // (name string Value, closure Value)
+    pub name: Gc,
+    pub base_class: Gc,
+    pub constructor: Gc,
+    pub methods: Vec<(Gc, Gc)>,  // (name string Value, closure Value)
 }
 
 #[derive(Debug, Clone)]
 pub struct GcInstance {
-    pub class: Value,
+    pub class: Gc,
     // Contains both user-set fields AND pre-bound method closures.
     // Methods are inserted at creation time so every field lookup is O(1)
     // with no class traversal needed at runtime.
@@ -72,9 +72,9 @@ pub struct GcInstance {
 
 #[derive(Debug, Clone, Copy)]
 pub struct GcClosure {
-    pub class: Option<Value>,
-    pub instance: Option<Value>,
-    pub function: Value,       // index to a GcFunction
+    pub class: Gc,
+    pub instance: Gc,
+    pub function: Gc,       // index to a GcFunction
     pub upvalues: Gc,       // index to an Upvalues
     pub function_kind: FunctionKind,
 }
@@ -89,9 +89,9 @@ pub struct Heap {
 impl Heap {
     pub fn new() -> Self {
         Self {
-            objects: Vec::with_capacity(1024),
-            marked: Vec::with_capacity(1024),
-            threshold: 1024,
+            objects: Vec::with_capacity(4096),
+            marked: Vec::with_capacity(4096),
+            threshold: 4096,
             free_slots: Vec::new(),
         }
     }
@@ -168,15 +168,9 @@ impl Heap {
     }
 
     fn mark(&mut self, value: Value) {
-        let gc = match value {
-            Value::String(gc)
-            | Value::Function(gc)
-            | Value::GlobalFunction(gc)
-            | Value::Closure(gc)
-            | Value::Class(gc)
-            | Value::Instance(gc)
-            | Value::Cell(gc) => gc,
-            Value::Number(_) | Value::Null | Value::Boolean(_) => return,
+        let gc = match value.is_number() || value.is_null() || value.is_bool() {
+            true => return,
+            false => value.unwrap_gc()
         };
 
         let idx = gc.0 as usize;
@@ -198,27 +192,27 @@ impl Heap {
             None => vec![],
             Some(obj) => match obj {
                 HeapObject::Closure(c) => {
-                    let mut v = vec![c.function];
-                    if let Some(cls) = c.class { v.push(cls); }
-                    if let Some(inst) = c.instance { v.push(inst); }
-                    v.push(Value::Function(c.upvalues)); // upvalues vec
+                    let mut v = vec![Value::function(c.function)];
+                    if let Some(cls) = c.class.as_option() { v.push(Value::class(cls)); }
+                    if let Some(inst) = c.instance.as_option() { v.push(Value::instance(inst)); }
+                    v.push(Value::function(c.upvalues)); // upvalues vec
                     v
                 }
-                HeapObject::Function(f) => vec![f.name],
+                HeapObject::Function(f) => vec![Value::string(f.name)],
                 HeapObject::GlobalFunction(_) => vec![],
                 HeapObject::ValueVec(vals) => vals.clone(),
                 HeapObject::Class(cls) => {
-                    let mut v = vec![cls.name];
-                    if let Some(b) = cls.base_class { v.push(b); }
-                    if let Some(c) = cls.constructor { v.push(c); }
+                    let mut v = vec![Value::string(cls.name)];
+                    if let Some(b) = cls.base_class.as_option() { v.push(Value::class(b)); }
+                    if let Some(c) = cls.constructor.as_option() { v.push(Value::closure(c)); }
                     for (name, method) in &cls.methods {
-                        v.push(*name);
-                        v.push(*method);
+                        v.push(Value::string(*name));
+                        v.push(Value::closure(*method));
                     }
                     v
                 }
                 HeapObject::Instance(inst) => {
-                    let mut v = vec![inst.class];
+                    let mut v = vec![Value::class(inst.class)];
                     for val in inst.fields.values() {
                         v.push(*val);
                     }
@@ -231,103 +225,146 @@ impl Heap {
         }
     }
 
+    pub fn resolve_cell(&self, gc: Gc) -> Option<&RefCell<Value>> {
+        if let HeapObject::Cell(ref_cell) = self.get(gc) {
+            Some(&ref_cell)
+        } else {
+            None
+        }
+    }
+
+    pub fn resolve_class(&self, gc: Gc) -> Option<&GcClass> {
+        if let HeapObject::Class(ref_cell) = self.get(gc) {
+            Some(&ref_cell)
+        } else {
+            None
+        }
+    }
+
+
+    pub fn resolve_instance(&self, gc: Gc) -> Option<&GcInstance> {
+        if let HeapObject::Instance(ref_cell) = self.get(gc) {
+            Some(&ref_cell)
+        } else {
+            None
+        }
+    }
+
+    pub fn resolve_function(&self, gc: Gc) -> Option<&GcFunction> {
+        if let HeapObject::Function(ref_cell) = self.get(gc) {
+            Some(ref_cell)
+        } else {
+            None
+        }
+    }
+
+    pub fn resolve_global_function(&self, gc: Gc) -> Option<&GlobalFunction> {
+        if let HeapObject::GlobalFunction(ref_cell) = self.get(gc) {
+            Some(ref_cell)
+        } else {
+            None
+        }
+    }
+
+    pub fn resolve_closure(&self, gc: Gc) -> Option<&GcClosure> {
+        if let HeapObject::Closure(ref_cell) = self.get(gc) {
+            Some(ref_cell)
+        } else {
+            None
+        }
+    }
+
+    pub fn resolve_string(&self, gc: Gc) -> Option<&str> {
+        if let HeapObject::String(ref_cell) = self.get(gc) {
+            Some(ref_cell)
+        } else {
+            None
+        }
+    }
+
+    pub fn resolve_value_vec(&self, gc: Gc) -> Option<&[Value]> {
+        if let HeapObject::ValueVec(ref_cell) = self.get(gc) {
+            Some(ref_cell)
+        } else {
+            None
+        }
+    }
+
+
     // -----------------------------------------------------------------
     // Value resolution helpers
     // -----------------------------------------------------------------
 
-    pub fn resolve_inner(&self, value: Value) -> ResolvedObject<'_> {
+    pub fn resolve_inner(&self, value: Value) -> Option<ResolvedObject<'_>> {
         match self.resolve(value) {
-            ResolvedObject::Cell(ref_cell) => self.resolve_inner(*ref_cell.borrow()),
+            Some(ResolvedObject::Cell(ref_cell)) => self.resolve_inner(*ref_cell.borrow()),
             value => value,
         }
     }
 
-    pub fn resolve(&self, value: Value) -> ResolvedObject<'_> {
-        match value {
-            Value::Number(c) => ResolvedObject::Number(c),
-            Value::String(gc) => match self.get(gc) {
-                HeapObject::String(s) => ResolvedObject::String(s),
-                _ => panic!("Expected a string!"),
-            },
-            Value::Null => ResolvedObject::Null,
-            Value::Boolean(b) => ResolvedObject::Boolean(b),
-            Value::Function(gc) => match self.get(gc) {
-                HeapObject::Function(s) => ResolvedObject::Function(s),
-                _ => panic!("Expected a function!"),
-            },
-            Value::GlobalFunction(global_function) => match self.get(global_function) {
-                HeapObject::GlobalFunction(s) => ResolvedObject::GlobalFunction(s),
-                _ => panic!("Expected a global function!"),
-            },
-            Value::Closure(gc) => match self.get(gc) {
-                HeapObject::Closure(s) => ResolvedObject::Closure(s),
-                _ => panic!("Expected a closure!"),
-            },
-            Value::Class(gc) => match self.get(gc) {
-                HeapObject::Class(s) => ResolvedObject::Class(s),
-                _ => panic!("Expected a class!"),
-            },
-            Value::Instance(gc) => match self.get(gc) {
-                HeapObject::Instance(i) => ResolvedObject::Instance(i),
-                _ => panic!("Expected a class instance!"),
-            },
-            Value::Cell(gc) => match self.get(gc) {
-                HeapObject::Cell(c) => ResolvedObject::Cell(c),
-                _ => panic!("Expected a value pointer!"),
-            },
+    pub fn resolve(&self, value: Value) -> Option<ResolvedObject<'_>> {
+
+        match Some(()) {
+            _ if value.is_number() => Some(ResolvedObject::Number(value.as_number())),
+            _ if value.is_null() => Some(ResolvedObject::Null),
+            _ if value.is_bool() => Some(ResolvedObject::Boolean(value.as_bool())),
+            _ if value.is_cell() => self.resolve_cell(value.unwrap_gc()).map(ResolvedObject::Cell),
+            _ if value.is_class() => self.resolve_class(value.unwrap_gc()).map(ResolvedObject::Class),
+            _ if value.is_instance() => self.resolve_instance(value.unwrap_gc()).map(ResolvedObject::Instance),
+            _ if value.is_function() => self.resolve_function(value.unwrap_gc()).map(ResolvedObject::Function),
+            _ if value.is_string() => self.resolve_string(value.unwrap_gc()).map(ResolvedObject::String),
+            _ if value.is_global_function() => self.resolve_global_function(value.unwrap_gc()).map(ResolvedObject::GlobalFunction),
+            _ if value.is_closure() => self.resolve_closure(value.unwrap_gc()).map(ResolvedObject::Closure),
+            _ => None
         }
     }
 
-    pub fn to_string(&self, value: Value) -> String {
-        match self.resolve_inner(value) {
-            ResolvedObject::Closure(gc_closure) => self.to_string(gc_closure.function),
+    pub fn to_string(&self, value: Value) -> Option<String> {
+         self.resolve_inner(value).and_then(|c| match c {
+            ResolvedObject::Closure(gc_closure) => self.to_string(Value::function(gc_closure.function)),
             ResolvedObject::Function(gc_function) => {
-                let name = self.to_string(gc_function.name);
-                format!("<fn {name}>")
+                self.to_string(Value::string(gc_function.name)).map(|name| format!("<fn {name}>"))
             }
             ResolvedObject::GlobalFunction(global_function) => {
-                format!("<fn {}>", global_function.name)
+                Some(format!("<fn {}>", global_function.name))
             }
-            ResolvedObject::ValueVec(_) => String::new(),
-            ResolvedObject::Class(gc_class) => self.to_string(gc_class.name),
-            ResolvedObject::String(c) => c.to_string(),
-            ResolvedObject::Number(c) => format!("{c}"),
-            ResolvedObject::Null => "nil".to_string(),
-            ResolvedObject::Boolean(f) => format!("{f}"),
+            ResolvedObject::ValueVec(_) => Some(String::new()),
+            ResolvedObject::Class(gc_class) => self.to_string(Value::string(gc_class.name)),
+            ResolvedObject::String(c) => Some(c.to_string()),
+            ResolvedObject::Number(c) => Some(format!("{c}")),
+            ResolvedObject::Null => Some("nil".to_string()),
+            ResolvedObject::Boolean(f) => Some(format!("{f}")),
             ResolvedObject::Instance(i) => {
-                format!("{} instance", self.to_string(i.class))
+                self.to_string(Value::class(i.class)).map(|c| format!("{} instance", c))
             }
             ResolvedObject::Cell(_) => unreachable!(),
-        }
+        })
     }
 
-    pub fn is_truthy(&self, value: Value) -> bool {
-        match self.resolve_inner(value) {
-            ResolvedObject::Null => false,
-            ResolvedObject::Boolean(v) => v,
-            _ => true,
-        }
+    pub fn is_truthy(&self, value: Value) -> Option<bool> {
+        self.resolve_inner(value).and_then(|v| match v {
+            ResolvedObject::Null => Some(false),
+            ResolvedObject::Boolean(v) => Some(v),
+            _ => Some(true),
+        })
     }
 
     pub fn set(&mut self, lhs: &mut Value, rhs: Value) {
-        match self.resolve(*lhs) {
+        match self.resolve(*lhs).unwrap() {
             ResolvedObject::Cell(ref_cell) => *ref_cell.borrow_mut() = rhs,
             _ => *lhs = rhs,
         }
     }
 
-    pub fn copy_value(&self, value: Value) -> Value {
+    pub fn copy_value(&self, value: Value) -> Option<Value> {
         match value {
-            Value::Cell(c) => match self.get(c) {
-                HeapObject::Cell(ref_cell) => *ref_cell.borrow(),
-                _ => unreachable!(),
-            },
-            _ => value,
+            _ if value.is_cell() => { self.resolve_cell(value.unwrap_gc()).map(|c| *c.borrow())}
+            _ => Some(value),
         }
     }
 
     pub fn alloc_string(&mut self, s: String) -> Value {
-        Value::String(self.alloc(HeapObject::String(s)))
+        Value::string(self.alloc(HeapObject::String(s)))
     }
 
     // -----------------------------------------------------------------
@@ -335,29 +372,27 @@ impl Heap {
     // -----------------------------------------------------------------
 
     /// Return the string name of a class/closure/function value.
-    pub fn name_of(&self, value: Value) -> String {
-        match self.resolve_inner(value) {
-            ResolvedObject::Function(f) => self.to_string(f.name),
-            ResolvedObject::Closure(c) => self.name_of(c.function),
-            ResolvedObject::Class(c) => self.to_string(c.name),
-            _ => String::new(),
-        }
+    pub fn name_of(&self, value: Value) -> Option<String> {
+        self.resolve_inner(value).and_then(|c|  match c {
+            ResolvedObject::Function(f) => self.to_string(Value::string(f.name)),
+            ResolvedObject::Closure(c) => self.name_of(Value::function(c.function)),
+            ResolvedObject::Class(c) => self.to_string(Value::string(c.name)),
+            _ => None,
+        })
     }
 
     /// Look up a method by name string on a class Gc handle.
     /// Searches the class's own methods vec; does NOT walk base classes.
-    pub fn class_get_method(&self, class: Gc, name: &str) -> Option<Value> {
-        match self.get(class) {
-            HeapObject::Class(c) => {
-                for (n, v) in &c.methods {
-                    if self.to_string(*n) == name {
-                        return Some(*v);
-                    }
+    pub fn class_get_method(&self, class: Gc, name: &str) -> Gc {
+        self.resolve_class(class).and_then(|c|  {
+            for (n, v) in &c.methods {
+                if self.to_string(Value::string(*n)).unwrap() == name {
+                    return Some(*v);
                 }
-                None
             }
-            _ => None,
-        }
+
+            None
+        }).unwrap_or_default()
     }
 
     /// Returns true if a method with the given name exists on the class.
@@ -367,29 +402,29 @@ impl Heap {
 
     pub fn equals(&mut self, lhs: Value, rhs: Value) -> bool {
         match (self.resolve_inner(lhs), self.resolve_inner(rhs)) {
-            (ResolvedObject::Closure(lhs), ResolvedObject::Closure(rhs)) => self.equals(lhs.function, rhs.function),
-            (ResolvedObject::Function(gc_function), ResolvedObject::Function(gc_closure)) => self.equals(gc_function.name, gc_closure.name),
-            (ResolvedObject::GlobalFunction(global_function), ResolvedObject::GlobalFunction(gf)) => global_function.name == gf.name,
-            (ResolvedObject::Class(gc_class), ResolvedObject::Class(gc_closure)) => self.equals(gc_class.name, gc_closure.name),
-            (ResolvedObject::String(s), ResolvedObject::String(gc_closure)) => s == gc_closure,
-            (ResolvedObject::Number(n), ResolvedObject::Number(rhs)) => n == rhs,
-            (ResolvedObject::Null, ResolvedObject::Null) => true,
-            (ResolvedObject::Boolean(lhs), ResolvedObject::Boolean(rhs)) => lhs == rhs,
-            (ResolvedObject::Instance(_), ResolvedObject::Instance(_)) => false,
+            (Some(ResolvedObject::Closure(lhs)), Some(ResolvedObject::Closure(rhs))) => self.equals(Value::function(lhs.function), Value::function(rhs.function)),
+            (Some(ResolvedObject::Function(gc_function)), Some(ResolvedObject::Function(gc_closure))) => self.equals(Value::string(gc_function.name), Value::string(gc_closure.name)),
+            (Some(ResolvedObject::GlobalFunction(global_function)), Some(ResolvedObject::GlobalFunction(gf))) => global_function.name == gf.name,
+            (Some(ResolvedObject::Class(gc_class)), Some(ResolvedObject::Class(gc_closure))) => self.equals(Value::string(gc_class.name), Value::string(gc_closure.name)),
+            (Some(ResolvedObject::String(s)), Some(ResolvedObject::String(gc_closure))) => s == gc_closure,
+            (Some(ResolvedObject::Number(n)), Some(ResolvedObject::Number(rhs))) => n == rhs,
+            (Some(ResolvedObject::Null), Some(ResolvedObject::Null)) => true,
+            (Some(ResolvedObject::Boolean(lhs)), Some(ResolvedObject::Boolean(rhs))) => lhs == rhs,
+            (Some(ResolvedObject::Instance(_)), Some(ResolvedObject::Instance(_))) => false,
             _ => false
         }
     }
 
     /// Add (or overwrite) a named method on a class.
     pub fn class_add_method(&mut self, class: Gc, name: Value, closure: Value) {
-        let name_str = self.to_string(name);
+        let name_str = self.to_string(name).unwrap();
         match self.get_mut(class) {
             HeapObject::Class(c) => {
 
-                c.methods.push((name, closure));
+                c.methods.push((name.unwrap_gc(), closure.unwrap_gc()));
                 // update constructor slot if this is "init"
                 if name_str == "init" {
-                    c.constructor = Some(closure);
+                    c.constructor = closure.unwrap_gc();
                 }
             }
             _ => panic!("Expected a class"),
@@ -400,23 +435,23 @@ impl Heap {
     /// already defined on `dst`.  Also copies constructor if dst has none.
     pub fn class_inherit(&mut self, dst: Gc, src: Gc) {
         // Collect methods from src first to avoid borrow conflict
-        let src_methods: Vec<(Value, Value)> = match self.get(src) {
+        let src_methods: Vec<(Gc, Gc)> = match self.get(src) {
             HeapObject::Class(c) => c.methods.clone(),
             _ => panic!("Expected a class"),
         };
-        let src_constructor: Option<Value> = match self.get(src) {
+        let src_constructor: Gc = match self.get(src) {
             HeapObject::Class(c) => c.constructor,
-            _ => None,
+            _ => Gc::NONE,
         };
 
         for (name, method) in src_methods {
-            let name_str = self.to_string(name);
+            let name_str = self.to_string(Value::string(name)).unwrap();
             if !self.class_has_method(dst, &name_str) {
                 match self.get_mut(dst) {
                     HeapObject::Class(c) => {
                         c.methods.push((name, method));
                         if name_str == "init" && c.constructor.is_none() {
-                            c.constructor = Some(method);
+                            c.constructor = method;
                         }
                     }
                     _ => panic!("Expected a class"),
@@ -427,21 +462,23 @@ impl Heap {
         // copy base_class pointer
         {
             match self.get_mut(dst) {
-                HeapObject::Class(c) => c.base_class = Some(Value::Class(src)),
+                HeapObject::Class(c) => c.base_class = src,
                 _ => {}
             }
         }
 
         // copy constructor if dst doesn't have one
-        if let (Some(ctor), true) = (src_constructor, {
-            match self.get(dst) {
-                HeapObject::Class(c) => c.constructor.is_none(),
-                _ => false,
-            }
-        }) {
-            match self.get_mut(dst) {
-                HeapObject::Class(c) => c.constructor = Some(ctor),
-                _ => {}
+        if !src_constructor.is_none() {
+            if {
+                match self.get(dst) {
+                    HeapObject::Class(c) => c.constructor.is_none(),
+                    _ => false,
+                }
+            } {
+                match self.get_mut(dst) {
+                    HeapObject::Class(c) => c.constructor = src_constructor,
+                    _ => {}
+                }
             }
         }
     }
@@ -454,21 +491,17 @@ impl Heap {
     /// every method from the class (and its ancestors) already bound to the
     /// fresh instance.  User-written fields added later simply overwrite the
     /// method entries with the same name.
-    pub fn instance_create(&mut self, class_val: Value) -> Value {
+    pub fn instance_create(&mut self, class_val: Gc) -> Option<Value> {
         // Gather all (name_str, closure_val) pairs from the class before
         // touching the heap mutably, to avoid borrow conflicts.
-        let class_gc = match class_val {
-            Value::Class(gc) => gc,
-            _ => panic!("instance_create: expected a Class value"),
-        };
-        let methods: Vec<(String, Value)> = match self.get(class_gc) {
-            HeapObject::Class(c) => c
+
+        let methods: Vec<(String, Gc)> =
+            self.resolve_class(class_val)?
                 .methods
                 .iter()
-                .map(|(n, v)| (self.to_string(*n), *v))
-                .collect(),
-            _ => panic!("instance_create: class Gc does not point to a Class"),
-        };
+                .map(|(n, v)| (self.to_string(Value::string(*n)).unwrap(), *v))
+                .collect();
+
 
         // Allocate the instance with an empty field map first so we have a
         // stable Gc handle to pass to bind_method.
@@ -476,20 +509,20 @@ impl Heap {
             class: class_val,
             fields: hashbrown::HashMap::with_capacity(methods.len()),
         }));
-        let instance_val = Value::Instance(instance_gc);
+
 
         // Bind every method and store it as a field.
         for (name, closure_val) in methods {
-            let bound = self.bind_method(closure_val, instance_val);
+            let bound = self.bind_method(closure_val, instance_gc)?;
             match self.get_mut(instance_gc) {
                 HeapObject::Instance(i) => {
                     i.fields.insert(name, bound);
                 }
-                _ => unreachable!(),
+                _ => return None,
             }
         }
 
-        instance_val
+        Some(Value::instance(instance_gc))
     }
 
     /// Simple field read — O(1), no class traversal.
@@ -512,17 +545,29 @@ impl Heap {
 
     /// Wrap a closure value with a bound instance, producing a new Closure
     /// heap object whose `instance` field is set.
-    pub fn bind_method(&mut self, closure_val: Value, instance: Value) -> Value {
-        let gc = match closure_val {
-            Value::Closure(gc) => gc,
-            _ => return closure_val,
-        };
-        // Copy the GcClosure fields out before we mutably borrow the heap
-        let closure = match self.objects[gc.0 as usize].as_ref() {
-            Some(HeapObject::Closure(c)) => *c,
-            _ => return closure_val,
-        };
-        let bound = GcClosure { instance: Some(instance), ..closure };
-        Value::Closure(self.alloc(HeapObject::Closure(bound)))
+    pub fn bind_method(&mut self, closure_val: Gc, instance: Gc) -> Option<Value> {
+        let gc = closure_val;
+        let closure = self.resolve_closure(closure_val)?;
+        let bound = GcClosure { instance: instance, ..*closure };
+        Some(Value::closure(self.alloc(HeapObject::Closure(bound))))
+    }
+}
+
+
+
+
+impl Gc {
+    pub const NONE: Gc = Gc(u32::MAX);
+
+    pub fn is_none(self) -> bool { self == Self::NONE }
+    pub fn is_some(self) -> bool { !self.is_none() }
+    pub fn as_option(self) -> Option<Gc> {
+        if self.is_none() { None } else { Some(self) }
+    }
+}
+
+impl Default for Gc {
+    fn default() -> Self {
+        Gc::NONE
     }
 }

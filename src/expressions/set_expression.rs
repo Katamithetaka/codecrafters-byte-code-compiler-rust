@@ -46,7 +46,7 @@ impl<'a> CodeGenerator<'a> for SetExpression<'a> {
         let str = HeapObject::String(self.lhs.rhs.token.to_string());
         let constant_v = chunk.borrow().heap().borrow_mut().alloc(str);
 
-        let constant = chunk.borrow_mut().get_or_write_constant(Value::String(constant_v), self.line_number());
+        let constant = chunk.borrow_mut().get_or_write_constant(Value::string(constant_v), self.line_number());
         chunk.borrow_mut().write_set_field(constant, value_register, dist, self.line_number());
 
         Ok(())
